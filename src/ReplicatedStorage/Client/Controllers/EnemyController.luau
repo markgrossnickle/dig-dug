@@ -40,6 +40,10 @@ function EnemyController:KnitStart()
 		self:_onEnemyDefeated(id)
 	end)
 
+	EnemyService.EnemyDefeated:Connect(function(id: number)
+		self:_onEnemyDefeated(id)
+	end)
+
 	EnemyService.FygarFire:Connect(function(enemyId: number, col: number, row: number, dirX: number, range: number)
 		self:_onFygarFire(enemyId, col, row, dirX, range)
 	end)

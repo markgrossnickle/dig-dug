@@ -248,12 +248,4 @@ function GridController:_setupCamera()
 		CFrame.new(Vector3.new(centerX, centerY, ORIGIN.Z + distance), Vector3.new(centerX, centerY, ORIGIN.Z))
 end
 
-function GridController:DestroyRockPart(col: number, row: number)
-	local key = `{col}_{row}`
-	if self._rockParts[key] then
-		self._rockParts[key]:Destroy()
-		self._rockParts[key] = nil
-	end
-end
-
 return GridController
