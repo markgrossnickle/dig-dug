@@ -36,6 +36,7 @@ GameService._playerData = {} :: {
 		stage: number,
 		state: string,
 		extraLifeAwarded: boolean,
+		highScore: number,
 	},
 }
 
@@ -64,6 +65,7 @@ function GameService:_initPlayer(player: Player)
 		stage = 1,
 		state = self.State.WAITING,
 		extraLifeAwarded = false,
+		highScore = 0,
 	}
 end
 
@@ -143,6 +145,8 @@ function GameService:OnPlayerDied(player: Player)
 	EnemyService:StopAI()
 	local RockService = Knit.GetService("RockService")
 	RockService:Stop()
+	local PumpService = Knit.GetService("PumpService")
+	PumpService:ClearAll()
 
 	self.Client.LivesChanged:Fire(player, data.lives)
 	self.Client.PlayerDied:Fire(player)
@@ -167,6 +171,12 @@ function GameService:OnStageClear(player: Player)
 	end
 
 	data.state = self.State.STAGE_CLEAR
+
+	local RockService = Knit.GetService("RockService")
+	RockService:Stop()
+	local PumpService = Knit.GetService("PumpService")
+	PumpService:ClearAll()
+
 	self.Client.StageClear:Fire(player)
 	self.Client.GameStateChanged:Fire(player, data.state)
 
@@ -186,7 +196,10 @@ function GameService:OnGameOver(player: Player)
 	end
 
 	data.state = self.State.GAME_OVER
-	self.Client.GameOver:Fire(player, data.score)
+	if data.score > data.highScore then
+		data.highScore = data.score
+	end
+	self.Client.GameOver:Fire(player, data.score, data.highScore)
 	self.Client.GameStateChanged:Fire(player, data.state)
 end
 
@@ -217,6 +230,11 @@ end
 
 function GameService.Client:GetState(player: Player): string
 	return self.Server:GetState(player)
+end
+
+function GameService.Client:GetHighScore(player: Player): number
+	local data = self.Server._playerData[player]
+	return if data then data.highScore else 0
 end
 
 function GameService.Client:RequestStartGame(player: Player)

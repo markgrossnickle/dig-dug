@@ -16,6 +16,7 @@ GameController._score = 0
 GameController._lives = 0
 GameController._stage = 1
 GameController._state = "Waiting"
+GameController._highScore = 0
 GameController._hudGui = nil :: ScreenGui?
 
 function GameController:KnitInit()
@@ -34,7 +35,6 @@ function GameController:KnitInit()
 end
 
 function GameController:_hideCharacter(character: Model)
-	-- Make the default character invisible — we use our own sprite
 	task.defer(function()
 		local humanoid = character:FindFirstChildOfClass("Humanoid")
 		if humanoid then
@@ -58,6 +58,9 @@ function GameController:KnitStart()
 
 	GameService.ScoreChanged:Connect(function(score: number)
 		self._score = score
+		if score > self._highScore then
+			self._highScore = score
+		end
 		self:_updateHUD()
 	end)
 
@@ -84,16 +87,18 @@ function GameController:KnitStart()
 
 	GameService.StageClear:Connect(function()
 		self:_showMessage("STAGE CLEAR!", DigDugConfig.STAGE_CLEAR_DELAY)
+		self:_flashCelebration()
 	end)
 
-	GameService.GameOver:Connect(function(finalScore: number)
-		self:_showMessage(`GAME OVER\nScore: {finalScore}`, 5)
+	GameService.GameOver:Connect(function(finalScore: number, highScore: number)
+		self._highScore = highScore
+		self:_updateHUD()
+		self:_showMessage(`GAME OVER\nScore: {finalScore}\nHigh Score: {highScore}`, 5)
 		task.delay(5, function()
 			self:_showStartScreen()
 		end)
 	end)
 
-	-- Create HUD
 	self:_createHUD()
 	self:_showStartScreen()
 end
@@ -120,6 +125,19 @@ function GameController:_createHUD()
 	scoreLabel.Text = "SCORE: 0"
 	scoreLabel.Parent = gui
 
+	-- High score display (below score)
+	local highScoreLabel = Instance.new("TextLabel")
+	highScoreLabel.Name = "HighScoreLabel"
+	highScoreLabel.Size = UDim2.new(0, 200, 0, 24)
+	highScoreLabel.Position = UDim2.new(0, 10, 0, 48)
+	highScoreLabel.BackgroundTransparency = 1
+	highScoreLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
+	highScoreLabel.TextSize = 18
+	highScoreLabel.Font = Enum.Font.Arcade
+	highScoreLabel.TextXAlignment = Enum.TextXAlignment.Left
+	highScoreLabel.Text = "HI: 0"
+	highScoreLabel.Parent = gui
+
 	-- Lives display (top center)
 	local livesLabel = Instance.new("TextLabel")
 	livesLabel.Name = "LivesLabel"
@@ -145,11 +163,11 @@ function GameController:_createHUD()
 	stageLabel.Text = "STAGE: 1"
 	stageLabel.Parent = gui
 
-	-- Center message label (for notifications)
+	-- Center message label
 	local msgLabel = Instance.new("TextLabel")
 	msgLabel.Name = "MessageLabel"
-	msgLabel.Size = UDim2.new(0, 400, 0, 100)
-	msgLabel.Position = UDim2.new(0.5, -200, 0.4, -50)
+	msgLabel.Size = UDim2.new(0, 400, 0, 120)
+	msgLabel.Position = UDim2.new(0.5, -200, 0.4, -60)
 	msgLabel.BackgroundTransparency = 0.3
 	msgLabel.BackgroundColor3 = Color3.new(0, 0, 0)
 	msgLabel.TextColor3 = Color3.new(1, 1, 0)
@@ -157,7 +175,12 @@ function GameController:_createHUD()
 	msgLabel.Font = Enum.Font.Arcade
 	msgLabel.Text = ""
 	msgLabel.Visible = false
+	msgLabel.TextWrapped = true
 	msgLabel.Parent = gui
+
+	local msgCorner = Instance.new("UICorner")
+	msgCorner.CornerRadius = UDim.new(0, 8)
+	msgCorner.Parent = msgLabel
 end
 
 function GameController:_updateHUD()
@@ -167,6 +190,10 @@ function GameController:_updateHUD()
 	local scoreLabel = self._hudGui:FindFirstChild("ScoreLabel") :: TextLabel?
 	if scoreLabel then
 		scoreLabel.Text = `SCORE: {self._score}`
+	end
+	local highScoreLabel = self._hudGui:FindFirstChild("HighScoreLabel") :: TextLabel?
+	if highScoreLabel then
+		highScoreLabel.Text = `HI: {self._highScore}`
 	end
 	local livesLabel = self._hudGui:FindFirstChild("LivesLabel") :: TextLabel?
 	if livesLabel then
@@ -208,12 +235,32 @@ function GameController:_hideMessage()
 	end
 end
 
+function GameController:_flashCelebration()
+	if not self._hudGui then
+		return
+	end
+	-- Brief screen flash for stage clear
+	local flash = Instance.new("Frame")
+	flash.Name = "CelebrationFlash"
+	flash.Size = UDim2.fromScale(1, 1)
+	flash.BackgroundColor3 = Color3.new(1, 1, 1)
+	flash.BackgroundTransparency = 0.7
+	flash.Parent = self._hudGui
+
+	task.spawn(function()
+		for i = 1, 6 do
+			flash.BackgroundTransparency = if i % 2 == 0 then 1 else 0.7
+			task.wait(0.15)
+		end
+		flash:Destroy()
+	end)
+end
+
 function GameController:_showStartScreen()
 	if not self._hudGui then
 		return
 	end
 
-	-- Create start screen
 	local existing = self._hudGui:FindFirstChild("StartScreen")
 	if existing then
 		existing:Destroy()
@@ -229,7 +276,7 @@ function GameController:_showStartScreen()
 	local title = Instance.new("TextLabel")
 	title.Name = "Title"
 	title.Size = UDim2.new(0, 500, 0, 80)
-	title.Position = UDim2.new(0.5, -250, 0.3, 0)
+	title.Position = UDim2.new(0.5, -250, 0.25, 0)
 	title.BackgroundTransparency = 1
 	title.TextColor3 = Color3.fromRGB(255, 200, 0)
 	title.TextSize = 60
@@ -237,10 +284,37 @@ function GameController:_showStartScreen()
 	title.Text = "DIG DUG"
 	title.Parent = frame
 
+	-- High score on start screen
+	if self._highScore > 0 then
+		local hiLabel = Instance.new("TextLabel")
+		hiLabel.Name = "HighScore"
+		hiLabel.Size = UDim2.new(0, 400, 0, 40)
+		hiLabel.Position = UDim2.new(0.5, -200, 0.38, 0)
+		hiLabel.BackgroundTransparency = 1
+		hiLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
+		hiLabel.TextSize = 24
+		hiLabel.Font = Enum.Font.Arcade
+		hiLabel.Text = `HIGH SCORE: {self._highScore}`
+		hiLabel.Parent = frame
+	end
+
+	-- Controls info
+	local controls = Instance.new("TextLabel")
+	controls.Name = "Controls"
+	controls.Size = UDim2.new(0, 400, 0, 60)
+	controls.Position = UDim2.new(0.5, -200, 0.68, 0)
+	controls.BackgroundTransparency = 1
+	controls.TextColor3 = Color3.fromRGB(180, 180, 180)
+	controls.TextSize = 16
+	controls.Font = Enum.Font.Arcade
+	controls.Text = "WASD/ARROWS: MOVE  |  SPACE: PUMP"
+	controls.TextWrapped = true
+	controls.Parent = frame
+
 	local startBtn = Instance.new("TextButton")
 	startBtn.Name = "StartButton"
 	startBtn.Size = UDim2.new(0, 300, 0, 60)
-	startBtn.Position = UDim2.new(0.5, -150, 0.55, 0)
+	startBtn.Position = UDim2.new(0.5, -150, 0.52, 0)
 	startBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 0)
 	startBtn.TextColor3 = Color3.new(1, 1, 1)
 	startBtn.TextSize = 32

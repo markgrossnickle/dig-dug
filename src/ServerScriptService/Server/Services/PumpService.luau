@@ -31,6 +31,22 @@ function PumpService:KnitStart()
 	end)
 end
 
+function PumpService:ClearPlayer(player: Player)
+	if self._pumpStates[player] then
+		self._pumpStates[player].active = false
+	end
+end
+
+function PumpService:ClearAll()
+	for _, state in self._pumpStates do
+		state.active = false
+	end
+	if self._heartbeatConn then
+		self._heartbeatConn:Disconnect()
+		self._heartbeatConn = nil
+	end
+end
+
 function PumpService:_onPumpFired(player: Player)
 	local PlayerService = Knit.GetService("PlayerService")
 	local EnemyService = Knit.GetService("EnemyService")

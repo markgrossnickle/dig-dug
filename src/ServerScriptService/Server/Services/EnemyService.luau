@@ -5,6 +5,7 @@ local RunService = game:GetService("RunService")
 local Knit = require(ReplicatedStorage.Packages.Knit)
 local Signal = require(ReplicatedStorage.Packages.Signal)
 local DigDugConfig = require(ReplicatedStorage.Shared.DigDugConfig)
+local StageLayouts = require(ReplicatedStorage.Shared.StageLayouts)
 
 local COLS = DigDugConfig.GRID_COLUMNS
 local ROWS = DigDugConfig.GRID_ROWS
@@ -15,15 +16,16 @@ type Enemy = {
 	col: number,
 	row: number,
 	direction: Vector2,
-	inflateLevel: number, -- 0 = normal, 1-3 = inflating, 4 = popped
+	inflateLevel: number,
 	isGhosting: boolean,
 	ghostTarget: Vector2?,
 	alive: boolean,
 	moveTimer: number,
 	deflateTimer: number,
 	ghostTimer: number,
-	fireTimer: number, -- Fygar fire cooldown
-	fireActive: boolean, -- currently breathing fire
+	fireTimer: number,
+	fireActive: boolean,
+	isFleeing: boolean,
 }
 
 local EnemyService = Knit.CreateService({
@@ -35,7 +37,8 @@ local EnemyService = Knit.CreateService({
 		EnemyPopped = Knit.CreateSignal(),
 		EnemyDefeated = Knit.CreateSignal(),
 		EnemyCrushed = Knit.CreateSignal(),
-		FygarFire = Knit.CreateSignal(), -- (enemyId, col, row, dirX, range)
+		FygarFire = Knit.CreateSignal(),
+		EnemyFleeing = Knit.CreateSignal(),
 		AllEnemiesDefeated = Knit.CreateSignal(),
 	},
 })
@@ -44,6 +47,8 @@ EnemyService._enemies = {} :: { Enemy }
 EnemyService._nextId = 1
 EnemyService._heartbeatConn = nil :: RBXScriptConnection?
 EnemyService._active = false
+EnemyService._currentStage = 1
+EnemyService._fleeTriggered = false
 EnemyService.EnemyKilled = Signal.new()
 EnemyService.AllDefeated = Signal.new()
 
@@ -51,69 +56,47 @@ function EnemyService:KnitInit() end
 
 function EnemyService:KnitStart() end
 
+-- Difficulty scaling helpers
+function EnemyService:_getEnemySpeed(): number
+	local base = DigDugConfig.ENEMY_SPEED
+	local bonus = math.floor((self._currentStage - 1) / 3) * 0.5
+	return base + bonus
+end
+
+function EnemyService:_getGhostSpeed(): number
+	local base = DigDugConfig.ENEMY_GHOST_SPEED
+	local bonus = math.floor((self._currentStage - 1) / 3) * 0.3
+	return base + bonus
+end
+
+function EnemyService:_getGhostCooldown(): number
+	local base = DigDugConfig.GHOST_MODE_TIME
+	local reduction = math.min(self._currentStage * 0.3, base * 0.6)
+	return base - reduction + math.random() * 3
+end
+
+function EnemyService:_getFireCooldown(): number
+	local base = 4
+	local reduction = math.min(self._currentStage * 0.2, 2.5)
+	return (base - reduction) + math.random() * 3
+end
+
 function EnemyService:SpawnEnemies(stage: number, player: Player)
 	self._enemies = {}
 	self._active = true
+	self._currentStage = stage
+	self._fleeTriggered = false
 
-	local config = DigDugConfig.StageEnemies[math.min(stage, #DigDugConfig.StageEnemies)]
-	local pookaCount = config[1]
-	local fygarCount = config[2]
-
-	-- Spawn Pookas in tunnels
-	local spawnPositions = self:_getEnemySpawnPositions(pookaCount + fygarCount)
-
-	for i = 1, pookaCount do
-		local pos = spawnPositions[i]
-		if pos then
-			self:_spawnEnemy(DigDugConfig.EnemyType.POOKA, pos.X, pos.Y, player)
-		end
+	local layout = StageLayouts.GetLayout(stage)
+	if not layout then
+		layout = StageLayouts.GenerateProceduralLayout(stage)
 	end
 
-	for i = 1, fygarCount do
-		local pos = spawnPositions[pookaCount + i]
-		if pos then
-			self:_spawnEnemy(DigDugConfig.EnemyType.FYGAR, pos.X, pos.Y, player)
-		end
+	for _, spawn in layout.enemies do
+		self:_spawnEnemy(spawn.enemyType, spawn.col, spawn.row, player)
 	end
 
-	-- Start AI loop
 	self:_startAILoop(player)
-end
-
-function EnemyService:_getEnemySpawnPositions(count: number): { Vector2 }
-	local GridService = Knit.GetService("GridService")
-	local positions = {} :: { Vector2 }
-
-	-- Find tunnel cells away from player spawn
-	local tunnelCells = {} :: { Vector2 }
-	for row = 3, ROWS do
-		for col = 1, COLS do
-			if GridService:IsWalkable(col, row) then
-				-- Not too close to player spawn
-				local dist = math.abs(col - DigDugConfig.PLAYER_SPAWN.X) + math.abs(row - DigDugConfig.PLAYER_SPAWN.Y)
-				if dist > 5 then
-					table.insert(tunnelCells, Vector2.new(col, row))
-				end
-			end
-		end
-	end
-
-	-- Pick random positions from available tunnel cells
-	for _ = 1, count do
-		if #tunnelCells > 0 then
-			local idx = math.random(1, #tunnelCells)
-			table.insert(positions, tunnelCells[idx])
-			table.remove(tunnelCells, idx)
-		else
-			-- Fallback: dig a tunnel for the enemy
-			local fallbackCol = math.random(2, COLS - 1)
-			local fallbackRow = math.random(8, ROWS - 1)
-			GridService:DigCell(fallbackCol, fallbackRow)
-			table.insert(positions, Vector2.new(fallbackCol, fallbackRow))
-		end
-	end
-
-	return positions
 end
 
 function EnemyService:_spawnEnemy(enemyType: string, col: number, row: number, player: Player): Enemy
@@ -129,9 +112,10 @@ function EnemyService:_spawnEnemy(enemyType: string, col: number, row: number, p
 		alive = true,
 		moveTimer = 0,
 		deflateTimer = 0,
-		ghostTimer = DigDugConfig.GHOST_MODE_TIME + math.random() * 5,
-		fireTimer = 3 + math.random() * 4,
+		ghostTimer = self:_getGhostCooldown(),
+		fireTimer = self:_getFireCooldown(),
 		fireActive = false,
+		isFleeing = false,
 	}
 	self._nextId += 1
 	table.insert(self._enemies, enemy)
@@ -169,13 +153,40 @@ function EnemyService:_updateEnemies(dt: number, player: Player)
 	end
 
 	local aliveCount = 0
+	for _, enemy in self._enemies do
+		if enemy.alive then
+			aliveCount += 1
+		end
+	end
+
+	-- Trigger flee mode when 1 enemy remains
+	if aliveCount == 1 and not self._fleeTriggered then
+		self._fleeTriggered = true
+		for _, enemy in self._enemies do
+			if enemy.alive then
+				enemy.isFleeing = true
+				enemy.isGhosting = false
+				self.Client.EnemyFleeing:Fire(player, enemy.id)
+				break
+			end
+		end
+	end
+
+	if aliveCount == 0 then
+		self:StopAI()
+		self.AllDefeated:Fire(player)
+		self.Client.AllEnemiesDefeated:Fire(player)
+		local GameService = Knit.GetService("GameService")
+		GameService:OnStageClear(player)
+		return
+	end
 
 	for _, enemy in self._enemies do
 		if not enemy.alive then
 			continue
 		end
 
-		-- Handle inflation deflation
+		-- Handle inflation/deflation
 		if enemy.inflateLevel > 0 then
 			enemy.deflateTimer += dt
 			if enemy.deflateTimer >= DigDugConfig.PUMP_DEFLATE_TIME then
@@ -183,44 +194,50 @@ function EnemyService:_updateEnemies(dt: number, player: Player)
 				enemy.inflateLevel -= 1
 				self.Client.EnemyInflated:Fire(player, enemy.id, enemy.inflateLevel)
 			end
-			aliveCount += 1
 			continue -- don't move while inflated
 		end
 
-		aliveCount += 1
-
-		-- Ghost timer
-		enemy.ghostTimer -= dt
-		if enemy.ghostTimer <= 0 and not enemy.isGhosting then
-			enemy.isGhosting = true
-			enemy.ghostTarget = playerPos
+		-- Ghost timer (not while fleeing)
+		if not enemy.isFleeing then
+			enemy.ghostTimer -= dt
+			if enemy.ghostTimer <= 0 and not enemy.isGhosting then
+				enemy.isGhosting = true
+				enemy.ghostTarget = playerPos
+			end
 		end
 
 		-- Movement
 		enemy.moveTimer += dt
-		local speed = if enemy.isGhosting then DigDugConfig.ENEMY_GHOST_SPEED else DigDugConfig.ENEMY_SPEED
+		local speed: number
+		if enemy.isFleeing then
+			speed = self:_getEnemySpeed() * 1.2
+		elseif enemy.isGhosting then
+			speed = self:_getGhostSpeed()
+		else
+			speed = self:_getEnemySpeed()
+		end
 		local moveInterval = 1 / speed
 
 		if enemy.moveTimer >= moveInterval then
 			enemy.moveTimer = 0
 
-			if enemy.isGhosting then
+			if enemy.isFleeing then
+				self:_moveFlee(enemy, GridService, player)
+			elseif enemy.isGhosting then
 				self:_moveGhost(enemy, playerPos, GridService, player)
 			else
 				self:_moveNormal(enemy, playerPos, GridService, player)
 			end
 
-			-- Fygar fire breathing
-			if enemy.enemyType == DigDugConfig.EnemyType.FYGAR and not enemy.isGhosting then
-				enemy.fireTimer -= 1 / DigDugConfig.ENEMY_SPEED -- decrement by one "turn"
+			-- Fygar fire breathing (not while fleeing or ghosting)
+			if enemy.enemyType == DigDugConfig.EnemyType.FYGAR and not enemy.isGhosting and not enemy.isFleeing then
+				enemy.fireTimer -= moveInterval
 				if enemy.fireTimer <= 0 then
-					enemy.fireTimer = 4 + math.random() * 5
-					-- Fire horizontally in facing direction (only if horizontal)
+					enemy.fireTimer = self:_getFireCooldown()
 					if math.abs(enemy.direction.X) > 0 then
 						local fireRange = 3
 						local fireDir = enemy.direction.X
 						self.Client.FygarFire:Fire(player, enemy.id, enemy.col, enemy.row, fireDir, fireRange)
-						-- Check if player is in fire path
 						for fi = 1, fireRange do
 							local fireCol = enemy.col + fireDir * fi
 							if not GridService:IsWalkable(fireCol, enemy.row) then
@@ -237,27 +254,41 @@ function EnemyService:_updateEnemies(dt: number, player: Player)
 				end
 			end
 
-			-- Check collision with player
-			if enemy.col == math.floor(playerPos.X + 0.5) and enemy.row == math.floor(playerPos.Y + 0.5) then
-				local GameService = Knit.GetService("GameService")
-				GameService:OnPlayerDied(player)
-				self:StopAI()
-				return
+			-- Check collision with player (not while fleeing)
+			if not enemy.isFleeing then
+				if enemy.col == playerPos.X and enemy.row == playerPos.Y then
+					local GameService = Knit.GetService("GameService")
+					GameService:OnPlayerDied(player)
+					self:StopAI()
+					return
+				end
+			end
+
+			-- Fleeing enemy escapes at row 1
+			if enemy.isFleeing and enemy.row <= 1 then
+				enemy.alive = false
+				self.Client.EnemyDefeated:Fire(player, enemy.id)
+				-- Check if all defeated now
+				local remaining = 0
+				for _, e in self._enemies do
+					if e.alive then
+						remaining += 1
+					end
+				end
+				if remaining == 0 then
+					self:StopAI()
+					self.AllDefeated:Fire(player)
+					self.Client.AllEnemiesDefeated:Fire(player)
+					local GameService = Knit.GetService("GameService")
+					GameService:OnStageClear(player)
+					return
+				end
 			end
 		end
-	end
-
-	if aliveCount == 0 then
-		self:StopAI()
-		self.AllDefeated:Fire(player)
-		self.Client.AllEnemiesDefeated:Fire(player)
-		local GameService = Knit.GetService("GameService")
-		GameService:OnStageClear(player)
 	end
 end
 
 function EnemyService:_moveNormal(enemy: Enemy, playerPos: Vector2, GridService: any, player: Player)
-	-- Simple chase AI: try to move toward player through tunnels
 	local possibleDirs = {
 		DigDugConfig.Direction.UP,
 		DigDugConfig.Direction.DOWN,
@@ -265,7 +296,6 @@ function EnemyService:_moveNormal(enemy: Enemy, playerPos: Vector2, GridService:
 		DigDugConfig.Direction.RIGHT,
 	}
 
-	-- Sort by distance to player
 	table.sort(possibleDirs, function(a, b)
 		local posA = Vector2.new(enemy.col + a.X, enemy.row + a.Y)
 		local posB = Vector2.new(enemy.col + b.X, enemy.row + b.Y)
@@ -274,12 +304,10 @@ function EnemyService:_moveNormal(enemy: Enemy, playerPos: Vector2, GridService:
 		return distA < distB
 	end)
 
-	-- Try each direction, prefer moving toward player
 	for _, dir in possibleDirs do
 		local newCol = enemy.col + dir.X
 		local newRow = enemy.row + dir.Y
 
-		-- Don't reverse direction unless no other option
 		if dir.X == -enemy.direction.X and dir.Y == -enemy.direction.Y then
 			continue
 		end
@@ -306,7 +334,6 @@ function EnemyService:_moveNormal(enemy: Enemy, playerPos: Vector2, GridService:
 end
 
 function EnemyService:_moveGhost(enemy: Enemy, playerPos: Vector2, GridService: any, player: Player)
-	-- Ghost mode: move directly toward player through walls
 	local dx = playerPos.X - enemy.col
 	local dy = playerPos.Y - enemy.row
 
@@ -321,12 +348,11 @@ function EnemyService:_moveGhost(enemy: Enemy, playerPos: Vector2, GridService: 
 	local newRow = enemy.row + dir.Y
 
 	if newCol >= 1 and newCol <= COLS and newRow >= 1 and newRow <= ROWS then
-		-- If we arrived at a walkable cell, stop ghosting
 		if GridService:IsWalkable(newCol, newRow) then
 			local distToPlayer = math.abs(newCol - playerPos.X) + math.abs(newRow - playerPos.Y)
 			if distToPlayer <= 3 then
 				enemy.isGhosting = false
-				enemy.ghostTimer = DigDugConfig.GHOST_MODE_TIME + math.random() * 10
+				enemy.ghostTimer = self:_getGhostCooldown()
 			end
 		end
 
@@ -337,11 +363,75 @@ function EnemyService:_moveGhost(enemy: Enemy, playerPos: Vector2, GridService: 
 	end
 end
 
+function EnemyService:_moveFlee(enemy: Enemy, GridService: any, player: Player)
+	-- Try to move upward through tunnels toward row 1
+	-- Prefer up, then sideways toward nearest tunnel going up
+	local fleeTarget = Vector2.new(enemy.col, 1) -- head toward surface
+
+	local possibleDirs = {
+		DigDugConfig.Direction.UP,
+		DigDugConfig.Direction.LEFT,
+		DigDugConfig.Direction.RIGHT,
+		DigDugConfig.Direction.DOWN,
+	}
+
+	-- Sort by distance to surface (prefer upward)
+	table.sort(possibleDirs, function(a, b)
+		local posA = Vector2.new(enemy.col + a.X, enemy.row + a.Y)
+		local posB = Vector2.new(enemy.col + b.X, enemy.row + b.Y)
+		local distA = (posA - fleeTarget).Magnitude
+		local distB = (posB - fleeTarget).Magnitude
+		return distA < distB
+	end)
+
+	-- Try walkable path first
+	for _, dir in possibleDirs do
+		local newCol = enemy.col + dir.X
+		local newRow = enemy.row + dir.Y
+
+		if dir.X == -enemy.direction.X and dir.Y == -enemy.direction.Y then
+			continue
+		end
+
+		if GridService:IsWalkable(newCol, newRow) then
+			enemy.col = newCol
+			enemy.row = newRow
+			enemy.direction = dir
+			self.Client.EnemyMoved:Fire(player, enemy.id, newCol, newRow)
+			return
+		end
+	end
+
+	-- If stuck in tunnels, ghost upward through dirt
+	local upCol = enemy.col
+	local upRow = enemy.row - 1
+	if upRow >= 1 and upRow <= ROWS then
+		enemy.col = upCol
+		enemy.row = upRow
+		enemy.direction = DigDugConfig.Direction.UP
+		self.Client.EnemyMoved:Fire(player, enemy.id, upCol, upRow)
+		return
+	end
+
+	-- Allow reversal as last resort
+	local reverseDir = Vector2.new(-enemy.direction.X, -enemy.direction.Y)
+	local newCol = enemy.col + reverseDir.X
+	local newRow = enemy.row + reverseDir.Y
+	if newCol >= 1 and newCol <= COLS and newRow >= 1 and newRow <= ROWS then
+		enemy.col = newCol
+		enemy.row = newRow
+		enemy.direction = reverseDir
+		self.Client.EnemyMoved:Fire(player, enemy.id, newCol, newRow)
+	end
+end
+
 function EnemyService:InflateEnemy(enemyId: number, player: Player): boolean
 	for _, enemy in self._enemies do
 		if enemy.id == enemyId and enemy.alive then
 			enemy.inflateLevel += 1
 			enemy.deflateTimer = 0
+			-- Stop fleeing if pumped
+			enemy.isFleeing = false
 			self.Client.EnemyInflated:Fire(player, enemy.id, enemy.inflateLevel)
 
 			if enemy.inflateLevel >= DigDugConfig.PUMP_POPS_REQUIRED then
@@ -362,7 +452,6 @@ function EnemyService:_killEnemy(enemy: Enemy, player: Player, crushed: boolean)
 		self.Client.EnemyPopped:Fire(player, enemy.id)
 	end
 
-	-- Score based on depth layer and enemy type
 	local GridService = Knit.GetService("GridService")
 	local layer = GridService:GetDepthLayer(enemy.row)
 	local GameService = Knit.GetService("GameService")
@@ -375,6 +464,10 @@ function EnemyService:_killEnemy(enemy: Enemy, player: Player, crushed: boolean)
 			scoreKey = "FYGAR_LAYER_" .. tostring(layer)
 		end
 		local points = DigDugConfig.Scoring[scoreKey] or 200
+		-- Bonus for killing fleeing enemy
+		if enemy.isFleeing then
+			points = points * 2
+		end
 		GameService:AddScore(player, points)
 	end
 
@@ -410,7 +503,6 @@ function EnemyService:GetEnemyInDirection(fromCol: number, fromRow: number, dir:
 		if enemy then
 			return enemy
 		end
-		-- Stop at dirt, rocks, or out-of-bounds (pump only travels through empty/tunnel)
 		if not GridService:IsWalkable(checkCol, checkRow) then
 			break
 		end

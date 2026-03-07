@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Knit = require(ReplicatedStorage.Packages.Knit)
 local Signal = require(ReplicatedStorage.Packages.Signal)
 local DigDugConfig = require(ReplicatedStorage.Shared.DigDugConfig)
+local StageLayouts = require(ReplicatedStorage.Shared.StageLayouts)
 
 local COLS = DigDugConfig.GRID_COLUMNS
 local ROWS = DigDugConfig.GRID_ROWS
@@ -41,21 +42,14 @@ end
 
 function GridService:ResetGrid(stage: number)
 	self:_initGrid()
+	self._rockPositions = {}
 
-	-- Carve initial tunnels based on stage
-	self:_carveStartingTunnels(stage)
+	local layout = StageLayouts.GetLayout(stage)
+	if not layout then
+		layout = StageLayouts.GenerateProceduralLayout(stage)
+	end
 
-	-- Place rocks
-	self:_placeRocks(stage)
-
-	-- Notify all clients
-	local gridData = self:_serializeGrid()
-	local rockData = self:_serializeRocks()
-	self.Client.GridReset:FireAll(gridData, rockData, stage)
-end
-
-function GridService:_carveStartingTunnels(_stage: number)
-	-- Player spawn area (top row, center)
+	-- Player spawn area (always present)
 	local spawnCol = math.floor(COLS / 2)
 	for col = spawnCol - 1, spawnCol + 1 do
 		if col >= 1 and col <= COLS then
@@ -63,36 +57,47 @@ function GridService:_carveStartingTunnels(_stage: number)
 		end
 	end
 
-	-- Create enemy chambers at various depths (small horizontal pockets)
-	-- Layer 1 enemies (row 4)
-	self:_carveTunnel(3, 4, 3) -- left chamber
-	self:_carveTunnel(10, 4, 4) -- right chamber
+	-- Carve tunnels from layout
+	for _, tunnel in layout.tunnels do
+		if tunnel.type == "horizontal" then
+			self:_carveTunnel(tunnel.col, tunnel.row, tunnel.length)
+		else
+			self:_carveVertical(tunnel.col, tunnel.row, tunnel.row + tunnel.length - 1)
+		end
+	end
 
-	-- Layer 2 enemies (row 8)
-	self:_carveTunnel(2, 8, 4)
-	self:_carveTunnel(8, 8, 3)
-	self:_carveTunnel(12, 8, 2)
+	-- Ensure enemy positions are walkable
+	for _, spawn in layout.enemies do
+		if spawn.col >= 1 and spawn.col <= COLS and spawn.row >= 1 and spawn.row <= ROWS then
+			if
+				self._grid[spawn.row][spawn.col] ~= CellType.TUNNEL
+				and self._grid[spawn.row][spawn.col] ~= CellType.EMPTY
+			then
+				self._grid[spawn.row][spawn.col] = CellType.TUNNEL
+			end
+		end
+	end
 
-	-- Layer 3 enemies (row 12)
-	self:_carveTunnel(4, 12, 3)
-	self:_carveTunnel(9, 12, 4)
+	-- Place rocks from layout
+	for _, rock in layout.rocks do
+		if rock.col >= 1 and rock.col <= COLS and rock.row >= 1 and rock.row <= ROWS then
+			self._grid[rock.row][rock.col] = CellType.ROCK
+			table.insert(self._rockPositions, Vector2.new(rock.col, rock.row))
+		end
+	end
 
-	-- Layer 4 deep (row 15)
-	self:_carveTunnel(5, 15, 5)
-
-	-- Add vertical connecting tunnels between layers
-	self:_carveVertical(4, 3, 5)
-	self:_carveVertical(11, 3, 5)
-	self:_carveVertical(3, 7, 9)
-	self:_carveVertical(10, 7, 9)
-	self:_carveVertical(6, 11, 13)
-	self:_carveVertical(8, 14, 16)
+	-- Notify all clients
+	local gridData = self:_serializeGrid()
+	local rockData = self:_serializeRocks()
+	self.Client.GridReset:FireAll(gridData, rockData, stage)
 end
 
 function GridService:_carveTunnel(startCol: number, row: number, length: number)
 	for col = startCol, math.min(startCol + length - 1, COLS) do
 		if col >= 1 and row >= 1 and row <= ROWS then
-			self._grid[row][col] = CellType.TUNNEL
+			if self._grid[row][col] == CellType.DIRT then
+				self._grid[row][col] = CellType.TUNNEL
+			end
 		end
 	end
 end
@@ -100,23 +105,9 @@ end
 function GridService:_carveVertical(col: number, startRow: number, endRow: number)
 	for row = startRow, math.min(endRow, ROWS) do
 		if col >= 1 and col <= COLS then
-			self._grid[row][col] = CellType.TUNNEL
-		end
-	end
-end
-
-function GridService:_placeRocks(_stage: number)
-	self._rockPositions = {}
-	-- Place rocks at different depths, sitting on dirt
-	local rockPositions = {
-		{ col = 3, row = 3 },
-		{ col = 7, row = 6 },
-		{ col = 11, row = 10 },
-	}
-	for _, pos in rockPositions do
-		if pos.col >= 1 and pos.col <= COLS and pos.row >= 1 and pos.row <= ROWS then
-			self._grid[pos.row][pos.col] = CellType.ROCK
-			table.insert(self._rockPositions, Vector2.new(pos.col, pos.row))
+			if self._grid[row][col] == CellType.DIRT then
+				self._grid[row][col] = CellType.TUNNEL
+			end
 		end
 	end
 end
@@ -201,7 +192,6 @@ function GridService:GetDepthLayer(row: number): number
 end
 
 function GridService:_serializeGrid(): { { number } }
-	-- Deep copy the grid for sending to clients
 	local data = {}
 	for row = 1, ROWS do
 		data[row] = {}
