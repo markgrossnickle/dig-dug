@@ -19,33 +19,33 @@ SoundController._musicPlaying = false
 -- Roblox asset IDs for retro/arcade-style sounds
 local SoundAssets = {
 	-- SFX
-	Dig = "rbxassetid://9113869830", -- short crunch
-	Pump = "rbxassetid://9113622901", -- air whoosh
-	EnemyPop = "rbxassetid://5801617096", -- cartoon pop
-	RockFall = "rbxassetid://5801617096", -- rumble thud (reuse pop for base)
-	RockCrush = "rbxassetid://4918728884", -- heavy impact
-	PlayerDeath = "rbxassetid://4918728884", -- retro death
-	StageClear = "rbxassetid://5801617096", -- victory
-	GameOver = "rbxassetid://4918728884", -- game over
-	FygarFire = "rbxassetid://9113622901", -- fire breath
-	ScorePopup = "rbxassetid://9113869830", -- coin ding
-	HighScore = "rbxassetid://5801617096", -- achievement
+	Dig = "rbxassetid://9114083260", -- dirt dig/shovel
+	Pump = "rbxassetid://17759294420", -- pump air whoosh
+	EnemyPop = "rbxassetid://7948526859", -- balloon pop
+	RockFall = "rbxassetid://1276167793", -- falling rocks rumble
+	RockCrush = "rbxassetid://3923230963", -- ground smash impact
+	PlayerDeath = "rbxassetid://297237983", -- 8-bit death
+	StageClear = "rbxassetid://1837507072", -- victory fanfare
+	GameOver = "rbxassetid://4858952348", -- game over 8-bit
+	FygarFire = "rbxassetid://221456870", -- fireball whoosh
+	ScorePopup = "rbxassetid://7128958209", -- bell ding
+	HighScore = "rbxassetid://4342630136", -- achievement jingle
 	-- Music
-	BGMusic = "rbxassetid://9043887091", -- chiptune loop
+	BGMusic = "rbxassetid://9048375773", -- 8-bit chiptune loop
 }
 
 -- Volume and pitch overrides per sound
 local SoundConfig: { [string]: { volume: number?, pitch: number?, looped: boolean? } } = {
-	Dig = { volume = 0.4, pitch = 1.5 },
-	Pump = { volume = 0.5, pitch = 1.2 },
-	EnemyPop = { volume = 0.7, pitch = 1.3 },
-	RockFall = { volume = 0.6, pitch = 0.6 },
-	RockCrush = { volume = 0.8, pitch = 0.7 },
-	PlayerDeath = { volume = 0.8, pitch = 0.8 },
-	StageClear = { volume = 0.7, pitch = 1.5 },
-	GameOver = { volume = 0.7, pitch = 0.5 },
-	FygarFire = { volume = 0.6, pitch = 0.7 },
-	ScorePopup = { volume = 0.3, pitch = 2.0 },
+	Dig = { volume = 0.4, pitch = 1.2 },
+	Pump = { volume = 0.5, pitch = 1.0 },
+	EnemyPop = { volume = 0.7, pitch = 1.0 },
+	RockFall = { volume = 0.6, pitch = 1.0 },
+	RockCrush = { volume = 0.8, pitch = 1.0 },
+	PlayerDeath = { volume = 0.8, pitch = 1.0 },
+	StageClear = { volume = 0.7, pitch = 1.0 },
+	GameOver = { volume = 0.7, pitch = 1.0 },
+	FygarFire = { volume = 0.6, pitch = 1.0 },
+	ScorePopup = { volume = 0.3, pitch = 1.2 },
 	HighScore = { volume = 0.8, pitch = 1.0 },
 	BGMusic = { volume = 0.3, looped = true },
 }
