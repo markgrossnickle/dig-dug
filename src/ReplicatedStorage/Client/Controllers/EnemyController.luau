@@ -40,6 +40,10 @@ function EnemyController:KnitStart()
 		self:_onEnemyDefeated(id)
 	end)
 
+	EnemyService.FygarFire:Connect(function(enemyId: number, col: number, row: number, dirX: number, range: number)
+		self:_onFygarFire(enemyId, col, row, dirX, range)
+	end)
+
 	-- Clean up enemies on grid reset
 	local GridService = Knit.GetService("GridService")
 	GridService.GridReset:Connect(function()
@@ -138,6 +142,40 @@ function EnemyController:_onEnemyDefeated(id: number)
 	end)
 
 	self._enemyParts[id] = nil
+end
+
+function EnemyController:_onFygarFire(_enemyId: number, col: number, row: number, dirX: number, range: number)
+	local GridController = Knit.GetController("GridController")
+
+	-- Create fire effect parts
+	task.spawn(function()
+		local fireParts = {}
+		for i = 1, range do
+			local fireCol = col + dirX * i
+			local worldPos = GridController:GridToWorld(fireCol, row)
+
+			local fire = Instance.new("Part")
+			fire.Name = "FygarFire"
+			fire.Anchored = true
+			fire.CanCollide = false
+			fire.Size = Vector3.new(CELL_SIZE * 0.7, CELL_SIZE * 0.5, CELL_SIZE * 0.5)
+			fire.Position = worldPos
+			fire.Color = Color3.fromRGB(255, 150, 0)
+			fire.Material = Enum.Material.Neon
+			fire.Transparency = 0.2
+			fire.Parent = workspace
+			table.insert(fireParts, fire)
+			task.wait(0.05)
+		end
+
+		-- Hold fire for a moment then fade
+		task.wait(0.3)
+		for _, fire in fireParts do
+			if fire and fire.Parent then
+				fire:Destroy()
+			end
+		end
+	end)
 end
 
 return EnemyController

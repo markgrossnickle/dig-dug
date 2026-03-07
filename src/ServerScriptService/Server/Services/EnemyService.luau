@@ -22,6 +22,8 @@ type Enemy = {
 	moveTimer: number,
 	deflateTimer: number,
 	ghostTimer: number,
+	fireTimer: number, -- Fygar fire cooldown
+	fireActive: boolean, -- currently breathing fire
 }
 
 local EnemyService = Knit.CreateService({
@@ -33,6 +35,7 @@ local EnemyService = Knit.CreateService({
 		EnemyPopped = Knit.CreateSignal(),
 		EnemyDefeated = Knit.CreateSignal(),
 		EnemyCrushed = Knit.CreateSignal(),
+		FygarFire = Knit.CreateSignal(), -- (enemyId, col, row, dirX, range)
 		AllEnemiesDefeated = Knit.CreateSignal(),
 	},
 })
@@ -124,6 +127,8 @@ function EnemyService:_spawnEnemy(enemyType: string, col: number, row: number, p
 		moveTimer = 0,
 		deflateTimer = 0,
 		ghostTimer = DigDugConfig.GHOST_MODE_TIME + math.random() * 5,
+		fireTimer = 3 + math.random() * 4,
+		fireActive = false,
 	}
 	self._nextId += 1
 	table.insert(self._enemies, enemy)
@@ -200,6 +205,33 @@ function EnemyService:_updateEnemies(dt: number, player: Player)
 				self:_moveGhost(enemy, playerPos, GridService, player)
 			else
 				self:_moveNormal(enemy, playerPos, GridService, player)
+			end
+
+			-- Fygar fire breathing
+			if enemy.enemyType == DigDugConfig.EnemyType.FYGAR and not enemy.isGhosting then
+				enemy.fireTimer -= 1 / DigDugConfig.ENEMY_SPEED -- decrement by one "turn"
+				if enemy.fireTimer <= 0 then
+					enemy.fireTimer = 4 + math.random() * 5
+					-- Fire horizontally in facing direction (only if horizontal)
+					if math.abs(enemy.direction.X) > 0 then
+						local fireRange = 3
+						local fireDir = enemy.direction.X
+						self.Client.FygarFire:Fire(player, enemy.id, enemy.col, enemy.row, fireDir, fireRange)
+						-- Check if player is in fire path
+						for fi = 1, fireRange do
+							local fireCol = enemy.col + fireDir * fi
+							if not GridService:IsWalkable(fireCol, enemy.row) then
+								break
+							end
+							if fireCol == playerPos.X and enemy.row == playerPos.Y then
+								local GameService = Knit.GetService("GameService")
+								GameService:OnPlayerDied(player)
+								self:StopAI()
+								return
+							end
+						end
+					end
+				end
 			end
 
 			-- Check collision with player
@@ -367,6 +399,7 @@ function EnemyService:GetEnemyAt(col: number, row: number): Enemy?
 end
 
 function EnemyService:GetEnemyInDirection(fromCol: number, fromRow: number, dir: Vector2, range: number): Enemy?
+	local GridService = Knit.GetService("GridService")
 	for i = 1, range do
 		local checkCol = fromCol + dir.X * i
 		local checkRow = fromRow + dir.Y * i
@@ -374,9 +407,8 @@ function EnemyService:GetEnemyInDirection(fromCol: number, fromRow: number, dir:
 		if enemy then
 			return enemy
 		end
-		-- Stop at walls (unless enemy is in the way)
-		local GridService = Knit.GetService("GridService")
-		if not GridService:IsWalkable(checkCol, checkRow) and not GridService:IsDirt(checkCol, checkRow) then
+		-- Stop at dirt, rocks, or out-of-bounds (pump only travels through empty/tunnel)
+		if not GridService:IsWalkable(checkCol, checkRow) then
 			break
 		end
 	end

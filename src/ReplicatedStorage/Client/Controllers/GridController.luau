@@ -1,4 +1,5 @@
 --!strict
+local Lighting = game:GetService("Lighting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Knit = require(ReplicatedStorage.Packages.Knit)
@@ -57,7 +58,6 @@ function GridController:_cleanWorkspace()
 	end
 
 	-- Set ambient lighting for the game
-	local Lighting = game:GetService("Lighting")
 	Lighting.Ambient = Color3.fromRGB(80, 80, 80)
 	Lighting.Brightness = 1
 	Lighting.ClockTime = 14
@@ -246,17 +246,6 @@ function GridController:_setupCamera()
 	camera.CameraType = Enum.CameraType.Scriptable
 	camera.CFrame =
 		CFrame.new(Vector3.new(centerX, centerY, ORIGIN.Z + distance), Vector3.new(centerX, centerY, ORIGIN.Z))
-end
-
-function GridController:MoveRockPart(fromCol: number, fromRow: number, toCol: number, toRow: number)
-	local oldKey = `{fromCol}_{fromRow}`
-	local rock = self._rockParts[oldKey]
-	if rock then
-		self._rockParts[oldKey] = nil
-		local newKey = `{toCol}_{toRow}`
-		self._rockParts[newKey] = rock
-		rock.Position = self:GridToWorld(toCol, toRow)
-	end
 end
 
 function GridController:DestroyRockPart(col: number, row: number)
