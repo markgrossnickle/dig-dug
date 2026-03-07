@@ -3,6 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Knit = require(ReplicatedStorage.Packages.Knit)
 local DigDugConfig = require(ReplicatedStorage.Shared.DigDugConfig)
+local PlatformUtil = require(ReplicatedStorage.Shared.PlatformUtil)
 
 local CELL_SIZE = DigDugConfig.CELL_SIZE
 
@@ -77,7 +78,8 @@ function RockController:KnitStart()
 end
 
 function RockController:_spawnDebris(pos: Vector3)
-	for i = 1, 6 do
+	local debrisCount = math.floor(6 * PlatformUtil.getParticleMultiplier())
+	for i = 1, debrisCount do
 		local debris = Instance.new("Part")
 		debris.Name = "RockDebris"
 		debris.Anchored = true
@@ -89,7 +91,7 @@ function RockController:_spawnDebris(pos: Vector3)
 		debris.Material = Enum.Material.Slate
 		debris.Parent = workspace
 
-		local angle = (i / 6) * math.pi * 2
+		local angle = (i / debrisCount) * math.pi * 2
 		local velX = math.cos(angle) * (4 + math.random() * 3)
 		local velY = math.sin(angle) * 4 + 2
 

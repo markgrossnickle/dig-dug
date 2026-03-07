@@ -3,6 +3,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Knit = require(ReplicatedStorage.Packages.Knit)
 local DigDugConfig = require(ReplicatedStorage.Shared.DigDugConfig)
+local PlatformUtil = require(ReplicatedStorage.Shared.PlatformUtil)
 
 local CELL_SIZE = DigDugConfig.CELL_SIZE
 
@@ -181,7 +182,7 @@ function EnemyController:_onEnemyDefeated(id: number)
 end
 
 function EnemyController:_spawnPopParticles(pos: Vector3, color: Color3)
-	local count = 8
+	local count = math.floor(8 * PlatformUtil.getParticleMultiplier())
 	for i = 1, count do
 		local particle = Instance.new("Part")
 		particle.Name = "PopParticle"
@@ -268,8 +269,9 @@ function EnemyController:_onFygarFire(_enemyId: number, col: number, row: number
 			local fireCol = col + dirX * i
 			local worldPos = GridController:GridToWorld(fireCol, row)
 
-			-- 3 layered fire parts per cell
-			for j = 1, 3 do
+			-- Layered fire parts per cell (fewer on mobile)
+			local fireLayers = if PlatformUtil.isMobile() then 1 else 3
+			for j = 1, fireLayers do
 				local fire = Instance.new("Part")
 				fire.Name = "FygarFire"
 				fire.Anchored = true

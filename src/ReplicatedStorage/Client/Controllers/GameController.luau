@@ -1,10 +1,12 @@
 --!strict
+local GuiService = game:GetService("GuiService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local StarterGui = game:GetService("StarterGui")
 
 local Knit = require(ReplicatedStorage.Packages.Knit)
 local DigDugConfig = require(ReplicatedStorage.Shared.DigDugConfig)
+local PlatformUtil = require(ReplicatedStorage.Shared.PlatformUtil)
 
 local LocalPlayer = Players.LocalPlayer
 
@@ -18,6 +20,10 @@ GameController._stage = 1
 GameController._state = "Waiting"
 GameController._highScore = 0
 GameController._hudGui = nil :: ScreenGui?
+
+local function scaled(baseSize: number): number
+	return math.floor(baseSize * PlatformUtil.getUIScale())
+end
 
 function GameController:KnitInit()
 	-- Disable default Roblox UI elements
@@ -112,27 +118,30 @@ function GameController:_createHUD()
 	gui.Parent = LocalPlayer.PlayerGui
 	self._hudGui = gui
 
+	local isMobile = PlatformUtil.isMobile()
+
 	-- Score display (top left)
 	local scoreLabel = Instance.new("TextLabel")
 	scoreLabel.Name = "ScoreLabel"
-	scoreLabel.Size = UDim2.new(0, 200, 0, 40)
-	scoreLabel.Position = UDim2.new(0, 10, 0, 10)
+	scoreLabel.Size = UDim2.new(0.3, 0, 0, scaled(36))
+	scoreLabel.Position = UDim2.new(0, scaled(10), 0, scaled(10))
 	scoreLabel.BackgroundTransparency = 1
 	scoreLabel.TextColor3 = Color3.new(1, 1, 1)
-	scoreLabel.TextSize = 28
+	scoreLabel.TextSize = scaled(if isMobile then 20 else 28)
 	scoreLabel.Font = Enum.Font.Arcade
 	scoreLabel.TextXAlignment = Enum.TextXAlignment.Left
+	scoreLabel.TextScaled = false
 	scoreLabel.Text = "SCORE: 0"
 	scoreLabel.Parent = gui
 
 	-- High score display (below score)
 	local highScoreLabel = Instance.new("TextLabel")
 	highScoreLabel.Name = "HighScoreLabel"
-	highScoreLabel.Size = UDim2.new(0, 200, 0, 24)
-	highScoreLabel.Position = UDim2.new(0, 10, 0, 48)
+	highScoreLabel.Size = UDim2.new(0.3, 0, 0, scaled(24))
+	highScoreLabel.Position = UDim2.new(0, scaled(10), 0, scaled(44))
 	highScoreLabel.BackgroundTransparency = 1
 	highScoreLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
-	highScoreLabel.TextSize = 18
+	highScoreLabel.TextSize = scaled(if isMobile then 14 else 18)
 	highScoreLabel.Font = Enum.Font.Arcade
 	highScoreLabel.TextXAlignment = Enum.TextXAlignment.Left
 	highScoreLabel.Text = "HI: 0"
@@ -141,11 +150,11 @@ function GameController:_createHUD()
 	-- Lives display (top center)
 	local livesLabel = Instance.new("TextLabel")
 	livesLabel.Name = "LivesLabel"
-	livesLabel.Size = UDim2.new(0, 200, 0, 40)
-	livesLabel.Position = UDim2.new(0.5, -100, 0, 10)
+	livesLabel.Size = UDim2.new(0.3, 0, 0, scaled(36))
+	livesLabel.Position = UDim2.new(0.35, 0, 0, scaled(10))
 	livesLabel.BackgroundTransparency = 1
 	livesLabel.TextColor3 = Color3.new(1, 1, 1)
-	livesLabel.TextSize = 28
+	livesLabel.TextSize = scaled(if isMobile then 20 else 28)
 	livesLabel.Font = Enum.Font.Arcade
 	livesLabel.Text = "LIVES: 3"
 	livesLabel.Parent = gui
@@ -153,11 +162,11 @@ function GameController:_createHUD()
 	-- Stage display (top right)
 	local stageLabel = Instance.new("TextLabel")
 	stageLabel.Name = "StageLabel"
-	stageLabel.Size = UDim2.new(0, 200, 0, 40)
-	stageLabel.Position = UDim2.new(1, -210, 0, 10)
+	stageLabel.Size = UDim2.new(0.3, 0, 0, scaled(36))
+	stageLabel.Position = UDim2.new(0.68, 0, 0, scaled(10))
 	stageLabel.BackgroundTransparency = 1
 	stageLabel.TextColor3 = Color3.new(1, 1, 1)
-	stageLabel.TextSize = 28
+	stageLabel.TextSize = scaled(if isMobile then 20 else 28)
 	stageLabel.Font = Enum.Font.Arcade
 	stageLabel.TextXAlignment = Enum.TextXAlignment.Right
 	stageLabel.Text = "STAGE: 1"
@@ -166,12 +175,13 @@ function GameController:_createHUD()
 	-- Center message label
 	local msgLabel = Instance.new("TextLabel")
 	msgLabel.Name = "MessageLabel"
-	msgLabel.Size = UDim2.new(0, 400, 0, 120)
-	msgLabel.Position = UDim2.new(0.5, -200, 0.4, -60)
+	msgLabel.Size = if isMobile then UDim2.new(0.85, 0, 0, scaled(100)) else UDim2.new(0, scaled(400), 0, scaled(120))
+	msgLabel.AnchorPoint = Vector2.new(0.5, 0.5)
+	msgLabel.Position = UDim2.new(0.5, 0, 0.4, 0)
 	msgLabel.BackgroundTransparency = 0.3
 	msgLabel.BackgroundColor3 = Color3.new(0, 0, 0)
 	msgLabel.TextColor3 = Color3.new(1, 1, 0)
-	msgLabel.TextSize = 36
+	msgLabel.TextSize = scaled(if isMobile then 24 else 36)
 	msgLabel.Font = Enum.Font.Arcade
 	msgLabel.Text = ""
 	msgLabel.Visible = false
@@ -239,7 +249,6 @@ function GameController:_flashCelebration()
 	if not self._hudGui then
 		return
 	end
-	-- Brief screen flash for stage clear
 	local flash = Instance.new("Frame")
 	flash.Name = "CelebrationFlash"
 	flash.Size = UDim2.fromScale(1, 1)
@@ -256,6 +265,17 @@ function GameController:_flashCelebration()
 	end)
 end
 
+function GameController:_startGame()
+	local startScreen = if self._hudGui then self._hudGui:FindFirstChild("StartScreen") else nil
+	if startScreen then
+		startScreen:Destroy()
+	end
+	local GameService = Knit.GetService("GameService")
+	GameService:RequestStartGame():catch(function(err)
+		warn("Failed to start game:", err)
+	end)
+end
+
 function GameController:_showStartScreen()
 	if not self._hudGui then
 		return
@@ -266,6 +286,9 @@ function GameController:_showStartScreen()
 		existing:Destroy()
 	end
 
+	local isMobile = PlatformUtil.isMobile()
+	local isGamepad = PlatformUtil.isGamepad()
+
 	local frame = Instance.new("Frame")
 	frame.Name = "StartScreen"
 	frame.Size = UDim2.fromScale(1, 1)
@@ -275,11 +298,12 @@ function GameController:_showStartScreen()
 
 	local title = Instance.new("TextLabel")
 	title.Name = "Title"
-	title.Size = UDim2.new(0, 500, 0, 80)
-	title.Position = UDim2.new(0.5, -250, 0.25, 0)
+	title.Size = UDim2.new(0.8, 0, 0, scaled(80))
+	title.AnchorPoint = Vector2.new(0.5, 0)
+	title.Position = UDim2.new(0.5, 0, 0.2, 0)
 	title.BackgroundTransparency = 1
 	title.TextColor3 = Color3.fromRGB(255, 200, 0)
-	title.TextSize = 60
+	title.TextSize = scaled(if isMobile then 44 else 60)
 	title.Font = Enum.Font.Arcade
 	title.Text = "DIG DUG"
 	title.Parent = frame
@@ -288,51 +312,64 @@ function GameController:_showStartScreen()
 	if self._highScore > 0 then
 		local hiLabel = Instance.new("TextLabel")
 		hiLabel.Name = "HighScore"
-		hiLabel.Size = UDim2.new(0, 400, 0, 40)
-		hiLabel.Position = UDim2.new(0.5, -200, 0.38, 0)
+		hiLabel.Size = UDim2.new(0.8, 0, 0, scaled(36))
+		hiLabel.AnchorPoint = Vector2.new(0.5, 0)
+		hiLabel.Position = UDim2.new(0.5, 0, 0.35, 0)
 		hiLabel.BackgroundTransparency = 1
 		hiLabel.TextColor3 = Color3.fromRGB(255, 200, 0)
-		hiLabel.TextSize = 24
+		hiLabel.TextSize = scaled(if isMobile then 18 else 24)
 		hiLabel.Font = Enum.Font.Arcade
 		hiLabel.Text = `HIGH SCORE: {self._highScore}`
 		hiLabel.Parent = frame
 	end
 
 	-- Controls info
+	local controlsText: string
+	if isGamepad then
+		controlsText = "D-PAD: MOVE  |  A: PUMP"
+	elseif isMobile then
+		controlsText = "D-PAD: MOVE  |  PUMP BUTTON: PUMP"
+	else
+		controlsText = "WASD/ARROWS: MOVE  |  SPACE: PUMP"
+	end
+
 	local controls = Instance.new("TextLabel")
 	controls.Name = "Controls"
-	controls.Size = UDim2.new(0, 400, 0, 60)
-	controls.Position = UDim2.new(0.5, -200, 0.68, 0)
+	controls.Size = UDim2.new(0.85, 0, 0, scaled(50))
+	controls.AnchorPoint = Vector2.new(0.5, 0)
+	controls.Position = UDim2.new(0.5, 0, 0.65, 0)
 	controls.BackgroundTransparency = 1
 	controls.TextColor3 = Color3.fromRGB(180, 180, 180)
-	controls.TextSize = 16
+	controls.TextSize = scaled(if isMobile then 13 else 16)
 	controls.Font = Enum.Font.Arcade
-	controls.Text = "WASD/ARROWS: MOVE  |  SPACE: PUMP"
+	controls.Text = controlsText
 	controls.TextWrapped = true
 	controls.Parent = frame
 
 	local startBtn = Instance.new("TextButton")
 	startBtn.Name = "StartButton"
-	startBtn.Size = UDim2.new(0, 300, 0, 60)
-	startBtn.Position = UDim2.new(0.5, -150, 0.52, 0)
+	startBtn.Size = if isMobile then UDim2.new(0.7, 0, 0, scaled(60)) else UDim2.new(0, scaled(300), 0, scaled(60))
+	startBtn.AnchorPoint = Vector2.new(0.5, 0)
+	startBtn.Position = UDim2.new(0.5, 0, 0.5, 0)
 	startBtn.BackgroundColor3 = Color3.fromRGB(0, 120, 0)
 	startBtn.TextColor3 = Color3.new(1, 1, 1)
-	startBtn.TextSize = 32
+	startBtn.TextSize = scaled(if isMobile then 24 else 32)
 	startBtn.Font = Enum.Font.Arcade
-	startBtn.Text = "START GAME"
+	startBtn.Text = if isGamepad then "PRESS A TO START" else "START GAME"
 	startBtn.Parent = frame
 
 	local corner = Instance.new("UICorner")
 	corner.CornerRadius = UDim.new(0, 8)
 	corner.Parent = startBtn
 
-	startBtn.MouseButton1Click:Connect(function()
-		frame:Destroy()
-		local GameService = Knit.GetService("GameService")
-		GameService:RequestStartGame():catch(function(err)
-			warn("Failed to start game:", err)
-		end)
+	startBtn.Activated:Connect(function()
+		self:_startGame()
 	end)
+
+	-- Gamepad: set selected object for navigation
+	if isGamepad then
+		GuiService.SelectedObject = startBtn
+	end
 end
 
 return GameController

@@ -241,7 +241,25 @@ function GridController:_setupCamera()
 	-- Position camera to see the full grid (2D side view)
 	local centerX = ORIGIN.X + (COLS * CELL_SIZE) / 2
 	local centerY = ORIGIN.Y - (ROWS * CELL_SIZE) / 2
-	local distance = math.max(COLS, ROWS) * CELL_SIZE * 0.9
+
+	-- Calculate distance to fit the grid in viewport
+	-- On portrait/narrow screens, need more distance so everything fits
+	local gridWidth = COLS * CELL_SIZE
+	local gridHeight = (ROWS + 2) * CELL_SIZE -- +2 for sky
+	local viewportSize = camera.ViewportSize
+	local aspect = viewportSize.X / math.max(viewportSize.Y, 1)
+
+	local distance
+	if aspect < 1 then
+		-- Portrait mode (mobile): zoom out more to fit width
+		distance = gridWidth / (2 * math.tan(math.rad(camera.FieldOfView / 2)) * aspect)
+	else
+		-- Landscape: fit by height or width, whichever needs more space
+		local distByHeight = gridHeight / (2 * math.tan(math.rad(camera.FieldOfView / 2)))
+		local distByWidth = gridWidth / (2 * math.tan(math.rad(camera.FieldOfView / 2)) * aspect)
+		distance = math.max(distByHeight, distByWidth)
+	end
+	distance = distance * 1.1 -- small margin
 
 	camera.CameraType = Enum.CameraType.Scriptable
 	camera.CFrame =
