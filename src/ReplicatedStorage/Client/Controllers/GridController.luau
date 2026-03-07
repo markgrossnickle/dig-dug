@@ -35,6 +35,33 @@ function GridController:KnitStart()
 	GridService.GridReset:Connect(function(gridData: { { number } }, rockData: { { number } }, _stage: number)
 		self:_buildGrid(gridData, rockData)
 	end)
+
+	-- Clean up default workspace objects
+	self:_cleanWorkspace()
+
+	-- Set up camera immediately so the start screen looks right
+	self:_setupCamera()
+end
+
+function GridController:_cleanWorkspace()
+	-- Remove default baseplate if it exists
+	local baseplate = workspace:FindFirstChild("Baseplate")
+	if baseplate then
+		baseplate:Destroy()
+	end
+
+	-- Remove any default spawn location
+	local spawn = workspace:FindFirstChild("SpawnLocation")
+	if spawn then
+		spawn:Destroy()
+	end
+
+	-- Set ambient lighting for the game
+	local Lighting = game:GetService("Lighting")
+	Lighting.Ambient = Color3.fromRGB(80, 80, 80)
+	Lighting.Brightness = 1
+	Lighting.ClockTime = 14
+	Lighting.FogEnd = 1000
 end
 
 function GridController:GridToWorld(col: number, row: number): Vector3

@@ -6,6 +6,7 @@ local Knit = require(ReplicatedStorage.Packages.Knit)
 local DigDugConfig = require(ReplicatedStorage.Shared.DigDugConfig)
 
 type FallingRock = {
+	id: number,
 	col: number,
 	row: number,
 	fallTimer: number,
@@ -16,13 +17,14 @@ type FallingRock = {
 local RockService = Knit.CreateService({
 	Name = "RockService",
 	Client = {
-		RockFalling = Knit.CreateSignal(),
-		RockLanded = Knit.CreateSignal(),
-		RockDestroyed = Knit.CreateSignal(),
+		RockStartFalling = Knit.CreateSignal(), -- (rockId, col, row)
+		RockMoved = Knit.CreateSignal(), -- (rockId, col, row)
+		RockDestroyed = Knit.CreateSignal(), -- (rockId)
 	},
 })
 
 RockService._rocks = {} :: { FallingRock }
+RockService._nextId = 1
 RockService._heartbeatConn = nil :: RBXScriptConnection?
 RockService._active = false
 
@@ -36,12 +38,14 @@ function RockService:InitRocks(player: Player)
 
 	for _, pos in GridService:GetRockPositions() do
 		table.insert(self._rocks, {
+			id = self._nextId,
 			col = pos.X,
 			row = pos.Y,
 			fallTimer = 0,
 			falling = false,
 			settled = false,
 		})
+		self._nextId += 1
 	end
 
 	self._active = true
@@ -91,7 +95,8 @@ function RockService:_update(dt: number, player: Player)
 					rock.fallTimer = 0
 					-- Remove rock from grid at current position
 					GridService:RemoveRock(rock.col, rock.row)
-					self.Client.RockFalling:Fire(player, rock.col, rock.row)
+					-- Tell client a rock started falling
+					self.Client.RockStartFalling:Fire(player, rock.id, rock.col, rock.row)
 				end
 			else
 				rock.fallTimer = 0
@@ -107,13 +112,11 @@ function RockService:_update(dt: number, player: Player)
 
 				-- Check if can continue falling
 				if nextRow > DigDugConfig.GRID_ROWS then
-					-- Hit bottom, destroy
 					self:_destroyRock(rock, i, player)
 					continue
 				end
 
 				if not GridService:IsWalkable(rock.col, nextRow) then
-					-- Hit ground, destroy
 					self:_destroyRock(rock, i, player)
 					continue
 				end
@@ -139,7 +142,7 @@ function RockService:_update(dt: number, player: Player)
 					GameService:OnPlayerDied(player)
 				end
 
-				self.Client.RockFalling:Fire(player, rock.col, rock.row)
+				self.Client.RockMoved:Fire(player, rock.id, rock.col, rock.row)
 			end
 		end
 	end
@@ -147,7 +150,7 @@ end
 
 function RockService:_destroyRock(rock: FallingRock, index: number, player: Player)
 	rock.settled = true
-	self.Client.RockDestroyed:Fire(player, rock.col, rock.row)
+	self.Client.RockDestroyed:Fire(player, rock.id)
 	table.remove(self._rocks, index)
 end
 

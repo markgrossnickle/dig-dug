@@ -90,6 +90,9 @@ function GameController:KnitStart()
 
 	GameService.GameOver:Connect(function(finalScore: number)
 		self:_showMessage(`GAME OVER\nScore: {finalScore}`, 5)
+		task.delay(5, function()
+			self:_showStartScreen()
+		end)
 	end)
 
 	-- Create HUD
@@ -254,7 +257,9 @@ function GameController:_showStartScreen()
 	startBtn.MouseButton1Click:Connect(function()
 		frame:Destroy()
 		local GameService = Knit.GetService("GameService")
-		GameService:RequestStartGame()
+		GameService:RequestStartGame():catch(function(err)
+			warn("Failed to start game:", err)
+		end)
 	end)
 end
 
