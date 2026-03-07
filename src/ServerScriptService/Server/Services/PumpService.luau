@@ -29,6 +29,16 @@ function PumpService:KnitStart()
 	PlayerService.PumpFired:Connect(function(player: Player)
 		self:_onPumpFired(player)
 	end)
+
+	local EnemyService = Knit.GetService("EnemyService")
+	EnemyService.EnemyKilled:Connect(function(enemy, _player, _crushed)
+		-- Clear any pump targeting this enemy (e.g. rock crushes pumped enemy)
+		for _, state in self._pumpStates do
+			if state.active and state.targetEnemyId == enemy.id then
+				state.active = false
+			end
+		end
+	end)
 end
 
 function PumpService:ClearPlayer(player: Player)

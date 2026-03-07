@@ -46,6 +46,7 @@ function RockController:KnitStart()
 	RockService.RockDestroyed:Connect(function(rockId: number)
 		local part = self._fallingRocks[rockId]
 		if part then
+			local shatterPos = part.Position
 			-- Quick break animation
 			task.spawn(function()
 				for i = 1, 5 do
@@ -59,6 +60,8 @@ function RockController:KnitStart()
 					part:Destroy()
 				end
 			end)
+			-- Spawn debris fragments
+			self:_spawnDebris(shatterPos)
 			self._fallingRocks[rockId] = nil
 		end
 	end)
@@ -71,6 +74,40 @@ function RockController:KnitStart()
 		end
 		self._fallingRocks = {}
 	end)
+end
+
+function RockController:_spawnDebris(pos: Vector3)
+	for i = 1, 6 do
+		local debris = Instance.new("Part")
+		debris.Name = "RockDebris"
+		debris.Anchored = true
+		debris.CanCollide = false
+		local size = 0.4 + math.random() * 0.5
+		debris.Size = Vector3.new(size, size, size)
+		debris.Position = pos
+		debris.Color = Color3.fromRGB(100 + math.random(0, 50), 100 + math.random(0, 50), 100 + math.random(0, 50))
+		debris.Material = Enum.Material.Slate
+		debris.Parent = workspace
+
+		local angle = (i / 6) * math.pi * 2
+		local velX = math.cos(angle) * (4 + math.random() * 3)
+		local velY = math.sin(angle) * 4 + 2
+
+		task.spawn(function()
+			for step = 1, 15 do
+				if not debris or not debris.Parent then
+					break
+				end
+				velY = velY - 0.5
+				debris.Position = debris.Position + Vector3.new(velX * 0.02, velY * 0.02, 0)
+				debris.Transparency = step / 15
+				task.wait(0.03)
+			end
+			if debris and debris.Parent then
+				debris:Destroy()
+			end
+		end)
+	end
 end
 
 return RockController

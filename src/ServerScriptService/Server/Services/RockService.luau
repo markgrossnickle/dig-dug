@@ -139,7 +139,9 @@ function RockService:_update(dt: number, player: Player)
 					and math.floor(playerPos.X + 0.5) == rock.col
 					and math.floor(playerPos.Y + 0.5) == rock.row
 				then
+					self.Client.RockMoved:Fire(player, rock.id, rock.col, rock.row)
 					GameService:OnPlayerDied(player)
+					return -- stop processing rocks after player death
 				end
 
 				self.Client.RockMoved:Fire(player, rock.id, rock.col, rock.row)

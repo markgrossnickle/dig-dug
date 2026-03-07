@@ -44,6 +44,10 @@ function EnemyController:KnitStart()
 		self:_onFygarFire(enemyId, col, row, dirX, range)
 	end)
 
+	EnemyService.EnemyFleeing:Connect(function(id: number)
+		self:_onEnemyFleeing(id)
+	end)
+
 	-- Clean up enemies on grid reset
 	local GridService = Knit.GetService("GridService")
 	GridService.GridReset:Connect(function()
@@ -120,6 +124,25 @@ function EnemyController:_onEnemyInflated(id: number, inflateLevel: number)
 	part.Color = baseColor:Lerp(Color3.new(1, 1, 1), whiteBlend * 0.5)
 end
 
+function EnemyController:_onEnemyFleeing(id: number)
+	local part = self._enemyParts[id]
+	if not part then
+		return
+	end
+	-- Flash the enemy white/pink to indicate fleeing
+	task.spawn(function()
+		while part and part.Parent do
+			part.Color = Color3.fromRGB(255, 180, 255)
+			task.wait(0.2)
+			if not part or not part.Parent then
+				break
+			end
+			part.Color = Color3.fromRGB(255, 80, 80)
+			task.wait(0.2)
+		end
+	end)
+end
+
 function EnemyController:_onEnemyDefeated(id: number)
 	local part = self._enemyParts[id]
 	if not part then
@@ -127,6 +150,7 @@ function EnemyController:_onEnemyDefeated(id: number)
 	end
 
 	local deathPos = part.Position
+	local deathColor = part.Color
 
 	-- Quick pop animation
 	task.spawn(function()
@@ -142,11 +166,49 @@ function EnemyController:_onEnemyDefeated(id: number)
 			part:Destroy()
 		end
 
+		-- Particle burst
+		self:_spawnPopParticles(deathPos, deathColor)
+
 		-- Show score popup at death position
 		self:_showScorePopup(deathPos)
 	end)
 
 	self._enemyParts[id] = nil
+end
+
+function EnemyController:_spawnPopParticles(pos: Vector3, color: Color3)
+	local count = 8
+	for i = 1, count do
+		local particle = Instance.new("Part")
+		particle.Name = "PopParticle"
+		particle.Anchored = true
+		particle.CanCollide = false
+		particle.Size = Vector3.new(0.5, 0.5, 0.5)
+		particle.Position = pos
+		particle.Color = color
+		particle.Material = Enum.Material.Neon
+		particle.Shape = Enum.PartType.Ball
+		particle.Parent = workspace
+
+		local angle = (i / count) * math.pi * 2
+		local velX = math.cos(angle) * 6
+		local velY = math.sin(angle) * 6
+
+		task.spawn(function()
+			for step = 1, 12 do
+				if not particle or not particle.Parent then
+					break
+				end
+				particle.Position = particle.Position + Vector3.new(velX * 0.02, velY * 0.02, 0)
+				particle.Transparency = step / 12
+				particle.Size = particle.Size * 0.9
+				task.wait(0.03)
+			end
+			if particle and particle.Parent then
+				particle:Destroy()
+			end
+		end)
+	end
 end
 
 function EnemyController:_showScorePopup(worldPos: Vector3)
@@ -190,29 +252,46 @@ end
 function EnemyController:_onFygarFire(_enemyId: number, col: number, row: number, dirX: number, range: number)
 	local GridController = Knit.GetController("GridController")
 
-	-- Create fire effect parts
+	local fireColors = {
+		Color3.fromRGB(255, 200, 0),
+		Color3.fromRGB(255, 120, 0),
+		Color3.fromRGB(220, 40, 0),
+	}
+
 	task.spawn(function()
 		local fireParts = {}
 		for i = 1, range do
 			local fireCol = col + dirX * i
 			local worldPos = GridController:GridToWorld(fireCol, row)
 
-			local fire = Instance.new("Part")
-			fire.Name = "FygarFire"
-			fire.Anchored = true
-			fire.CanCollide = false
-			fire.Size = Vector3.new(CELL_SIZE * 0.7, CELL_SIZE * 0.5, CELL_SIZE * 0.5)
-			fire.Position = worldPos
-			fire.Color = Color3.fromRGB(255, 150, 0)
-			fire.Material = Enum.Material.Neon
-			fire.Transparency = 0.2
-			fire.Parent = workspace
-			table.insert(fireParts, fire)
+			-- 3 layered fire parts per cell
+			for j = 1, 3 do
+				local fire = Instance.new("Part")
+				fire.Name = "FygarFire"
+				fire.Anchored = true
+				fire.CanCollide = false
+				local scale = 1.1 - (j * 0.2)
+				fire.Size = Vector3.new(CELL_SIZE * 0.7 * scale, CELL_SIZE * 0.5 * scale, CELL_SIZE * 0.5 * scale)
+				fire.Position = worldPos + Vector3.new(0, (j - 2) * 0.3, (j - 2) * 0.2)
+				fire.Color = fireColors[j]
+				fire.Material = Enum.Material.Neon
+				fire.Transparency = 0.1 + (j * 0.1)
+				fire.Parent = workspace
+				table.insert(fireParts, fire)
+			end
 			task.wait(0.05)
 		end
 
-		-- Hold fire for a moment then fade
+		-- Hold fire then fade
 		task.wait(0.3)
+		for step = 1, 5 do
+			for _, fire in fireParts do
+				if fire and fire.Parent then
+					fire.Transparency = step / 5
+				end
+			end
+			task.wait(0.04)
+		end
 		for _, fire in fireParts do
 			if fire and fire.Parent then
 				fire:Destroy()
