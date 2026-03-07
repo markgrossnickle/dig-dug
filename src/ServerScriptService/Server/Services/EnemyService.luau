@@ -105,8 +105,11 @@ function EnemyService:_getEnemySpawnPositions(count: number): { Vector2 }
 			table.insert(positions, tunnelCells[idx])
 			table.remove(tunnelCells, idx)
 		else
-			-- Fallback: place in lower area
-			table.insert(positions, Vector2.new(math.random(2, COLS - 1), math.random(8, ROWS - 1)))
+			-- Fallback: dig a tunnel for the enemy
+			local fallbackCol = math.random(2, COLS - 1)
+			local fallbackRow = math.random(8, ROWS - 1)
+			GridService:DigCell(fallbackCol, fallbackRow)
+			table.insert(positions, Vector2.new(fallbackCol, fallbackRow))
 		end
 	end
 

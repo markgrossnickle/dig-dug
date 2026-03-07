@@ -69,15 +69,13 @@ function GameController:KnitStart()
 	GameService.StageChanged:Connect(function(stage: number)
 		self._stage = stage
 		self:_updateHUD()
+		self:_hideMessage()
+		self:_showMessage(`STAGE {stage}`, DigDugConfig.ROUND_START_DELAY)
 	end)
 
 	GameService.GameStateChanged:Connect(function(state: string)
 		self._state = state
 		self:_updateHUD()
-
-		if state == "Waiting" or state == "GameOver" then
-			self:_showStartScreen()
-		end
 	end)
 
 	GameService.PlayerDied:Connect(function()
