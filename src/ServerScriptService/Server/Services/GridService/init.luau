@@ -55,7 +55,7 @@ function GridService:ResetGrid(stage: number)
 end
 
 function GridService:_carveStartingTunnels(_stage: number)
-	-- Player spawn area (top center)
+	-- Player spawn area (top row, center)
 	local spawnCol = math.floor(COLS / 2)
 	for col = spawnCol - 1, spawnCol + 1 do
 		if col >= 1 and col <= COLS then
@@ -63,24 +63,43 @@ function GridService:_carveStartingTunnels(_stage: number)
 		end
 	end
 
-	-- Create horizontal tunnels at various depths for enemies
-	local tunnelRows = { 4, 8, 12 }
-	for _, row in tunnelRows do
-		if row <= ROWS then
-			local startCol = math.random(2, 5)
-			local endCol = math.random(COLS - 4, COLS - 1)
-			for col = startCol, endCol do
-				self._grid[row][col] = CellType.TUNNEL
-			end
+	-- Create enemy chambers at various depths (small horizontal pockets)
+	-- Layer 1 enemies (row 4)
+	self:_carveTunnel(3, 4, 3) -- left chamber
+	self:_carveTunnel(10, 4, 4) -- right chamber
+
+	-- Layer 2 enemies (row 8)
+	self:_carveTunnel(2, 8, 4)
+	self:_carveTunnel(8, 8, 3)
+	self:_carveTunnel(12, 8, 2)
+
+	-- Layer 3 enemies (row 12)
+	self:_carveTunnel(4, 12, 3)
+	self:_carveTunnel(9, 12, 4)
+
+	-- Layer 4 deep (row 15)
+	self:_carveTunnel(5, 15, 5)
+
+	-- Add vertical connecting tunnels between layers
+	self:_carveVertical(4, 3, 5)
+	self:_carveVertical(11, 3, 5)
+	self:_carveVertical(3, 7, 9)
+	self:_carveVertical(10, 7, 9)
+	self:_carveVertical(6, 11, 13)
+	self:_carveVertical(8, 14, 16)
+end
+
+function GridService:_carveTunnel(startCol: number, row: number, length: number)
+	for col = startCol, math.min(startCol + length - 1, COLS) do
+		if col >= 1 and row >= 1 and row <= ROWS then
+			self._grid[row][col] = CellType.TUNNEL
 		end
 	end
+end
 
-	-- Add some vertical connecting tunnels
-	local vertCols = { 4, COLS - 3 }
-	for _, col in vertCols do
-		local startRow = math.random(3, 5)
-		local endRow = math.random(startRow + 2, math.min(startRow + 4, ROWS))
-		for row = startRow, endRow do
+function GridService:_carveVertical(col: number, startRow: number, endRow: number)
+	for row = startRow, math.min(endRow, ROWS) do
+		if col >= 1 and col <= COLS then
 			self._grid[row][col] = CellType.TUNNEL
 		end
 	end
@@ -88,13 +107,16 @@ end
 
 function GridService:_placeRocks(_stage: number)
 	self._rockPositions = {}
-	local rockCols = DigDugConfig.DEFAULT_ROCK_COLUMNS
-	for _, col in rockCols do
-		if col >= 1 and col <= COLS then
-			-- Place rocks at row 3 by default (just below surface)
-			local row = 3
-			self._grid[row][col] = CellType.ROCK
-			table.insert(self._rockPositions, Vector2.new(col, row))
+	-- Place rocks at different depths, sitting on dirt
+	local rockPositions = {
+		{ col = 3, row = 3 },
+		{ col = 7, row = 6 },
+		{ col = 11, row = 10 },
+	}
+	for _, pos in rockPositions do
+		if pos.col >= 1 and pos.col <= COLS and pos.row >= 1 and pos.row <= ROWS then
+			self._grid[pos.row][pos.col] = CellType.ROCK
+			table.insert(self._rockPositions, Vector2.new(pos.col, pos.row))
 		end
 	end
 end

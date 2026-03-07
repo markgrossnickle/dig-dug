@@ -126,6 +126,8 @@ function EnemyController:_onEnemyDefeated(id: number)
 		return
 	end
 
+	local deathPos = part.Position
+
 	-- Quick pop animation
 	task.spawn(function()
 		for i = 1, 5 do
@@ -139,9 +141,50 @@ function EnemyController:_onEnemyDefeated(id: number)
 		if part and part.Parent then
 			part:Destroy()
 		end
+
+		-- Show score popup at death position
+		self:_showScorePopup(deathPos)
 	end)
 
 	self._enemyParts[id] = nil
+end
+
+function EnemyController:_showScorePopup(worldPos: Vector3)
+	local billboardGui = Instance.new("BillboardGui")
+	billboardGui.Size = UDim2.new(0, 80, 0, 40)
+	billboardGui.StudsOffset = Vector3.new(0, 2, 0)
+	billboardGui.AlwaysOnTop = true
+
+	local anchor = Instance.new("Part")
+	anchor.Name = "ScorePopup"
+	anchor.Anchored = true
+	anchor.CanCollide = false
+	anchor.Transparency = 1
+	anchor.Size = Vector3.new(0.1, 0.1, 0.1)
+	anchor.Position = worldPos
+	anchor.Parent = workspace
+
+	billboardGui.Parent = anchor
+	billboardGui.Adornee = anchor
+
+	local label = Instance.new("TextLabel")
+	label.Size = UDim2.fromScale(1, 1)
+	label.BackgroundTransparency = 1
+	label.TextColor3 = Color3.fromRGB(255, 255, 0)
+	label.TextSize = 18
+	label.Font = Enum.Font.Arcade
+	label.Text = "POP!"
+	label.Parent = billboardGui
+
+	-- Float up and fade
+	task.spawn(function()
+		for i = 1, 20 do
+			anchor.Position = anchor.Position + Vector3.new(0, 0.1, 0)
+			label.TextTransparency = i / 20
+			task.wait(0.03)
+		end
+		anchor:Destroy()
+	end)
 end
 
 function EnemyController:_onFygarFire(_enemyId: number, col: number, row: number, dirX: number, range: number)
