@@ -555,11 +555,11 @@ function GameController:_showStartScreen()
 	-- Controls info
 	local controlsText: string
 	if isGamepad then
-		controlsText = "D-PAD: MOVE  |  A: PUMP\nWALK ACROSS FAULT LINES TO DRILL THEM!"
+		controlsText = "D-PAD: MOVE  |  A: PUMP  |  X: DRILL\nDRILL FAULT LINES TO SINK ISLAND CHUNKS!"
 	elseif isMobile then
-		controlsText = "D-PAD: MOVE  |  PUMP BUTTON: PUMP\nWALK ACROSS FAULT LINES TO DRILL THEM!"
+		controlsText = "D-PAD: MOVE  |  PUMP: INFLATE  |  DRILL: CRACK\nDRILL FAULT LINES TO SINK ISLAND CHUNKS!"
 	else
-		controlsText = "WASD/ARROWS: MOVE  |  SPACE: PUMP\nWALK ACROSS FAULT LINES TO DRILL THEM!"
+		controlsText = "WASD/ARROWS: MOVE  |  SPACE: PUMP  |  E: DRILL\nDRILL FAULT LINES TO SINK ISLAND CHUNKS!"
 	end
 
 	local controls = Instance.new("TextLabel")

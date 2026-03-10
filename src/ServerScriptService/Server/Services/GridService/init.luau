@@ -305,7 +305,11 @@ function GridService:CheckChunks(player: Player): { { number } }
 	return sinkingCells
 end
 
--- Check if there's a drilled fault between two adjacent cells
+-- Check if there's a drilled fault between two adjacent cells (public for movement blocking)
+function GridService:HasDrilledFaultBetween(c1: number, r1: number, c2: number, r2: number): boolean
+	return self:_hasDrilledFaultBetween(c1, r1, c2, r2)
+end
+
 function GridService:_hasDrilledFaultBetween(c1: number, r1: number, c2: number, r2: number): boolean
 	local dc = c2 - c1
 	local dr = r2 - r1

@@ -204,12 +204,18 @@ function EnemyService:_updateEnemies(dt: number, player: Player)
 						local fireRange = 3
 						local fireDir = enemy.direction.X
 						self.Client.FygarFire:Fire(player, enemy.id, enemy.col, enemy.row, fireDir, fireRange)
+						local prevFireCol = enemy.col
 						for fi = 1, fireRange do
 							local fireCol = enemy.col + fireDir * fi
+							-- Fire stops at drilled faults
+							if GridService:HasDrilledFaultBetween(prevFireCol, enemy.row, fireCol, enemy.row) then
+								break
+							end
 							-- Fire stops at water/sunk
 							if not GridService:IsIsland(fireCol, enemy.row) then
 								break
 							end
+							prevFireCol = fireCol
 							if fireCol == playerPos.X and enemy.row == playerPos.Y then
 								local GameService = Knit.GetService("GameService")
 								GameService:OnPlayerDied(player)
@@ -281,8 +287,11 @@ function EnemyService:_moveChase(enemy: Enemy, playerPos: Vector2, GridService: 
 			continue
 		end
 
-		-- Can only walk on island cells
-		if GridService:IsIsland(newCol, newRow) then
+		-- Can only walk on island cells, and drilled faults block movement
+		if
+			GridService:IsIsland(newCol, newRow)
+			and not GridService:HasDrilledFaultBetween(enemy.col, enemy.row, newCol, newRow)
+		then
 			enemy.col = newCol
 			enemy.row = newRow
 			enemy.direction = dir
@@ -295,7 +304,10 @@ function EnemyService:_moveChase(enemy: Enemy, playerPos: Vector2, GridService: 
 	local reverseDir = Vector2.new(-enemy.direction.X, -enemy.direction.Y)
 	local newCol = enemy.col + reverseDir.X
 	local newRow = enemy.row + reverseDir.Y
-	if GridService:IsIsland(newCol, newRow) then
+	if
+		GridService:IsIsland(newCol, newRow)
+		and not GridService:HasDrilledFaultBetween(enemy.col, enemy.row, newCol, newRow)
+	then
 		enemy.col = newCol
 		enemy.row = newRow
 		enemy.direction = reverseDir
@@ -321,6 +333,11 @@ function EnemyService:_moveFlee(enemy: Enemy, GridService: any, player: Player)
 		local newRow = enemy.row + dir.Y
 
 		if not GridService:IsIsland(newCol, newRow) then
+			continue
+		end
+
+		-- Drilled faults block movement
+		if GridService:HasDrilledFaultBetween(enemy.col, enemy.row, newCol, newRow) then
 			continue
 		end
 
@@ -440,9 +457,15 @@ end
 
 function EnemyService:GetEnemyInDirection(fromCol: number, fromRow: number, dir: Vector2, range: number): Enemy?
 	local GridService = Knit.GetService("GridService")
+	local prevCol = fromCol
+	local prevRow = fromRow
 	for i = 1, range do
 		local checkCol = fromCol + dir.X * i
 		local checkRow = fromRow + dir.Y * i
+		-- LOS stops at drilled faults
+		if GridService:HasDrilledFaultBetween(prevCol, prevRow, checkCol, checkRow) then
+			break
+		end
 		local enemy = self:GetEnemyAt(checkCol, checkRow)
 		if enemy then
 			return enemy
@@ -451,6 +474,8 @@ function EnemyService:GetEnemyInDirection(fromCol: number, fromRow: number, dir:
 		if not GridService:IsIsland(checkCol, checkRow) then
 			break
 		end
+		prevCol = checkCol
+		prevRow = checkRow
 	end
 	return nil
 end

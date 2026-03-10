@@ -25,8 +25,10 @@ PlayerController._pumpModel = nil :: Model?
 PlayerController._touchDirX = 0
 PlayerController._touchDirY = 0
 PlayerController._touchPump = false
+PlayerController._touchDrill = false
 PlayerController._gamepadConn = nil :: RBXScriptConnection?
 PlayerController._walkBob = 0
+PlayerController._drillCooldown = 0
 
 function PlayerController:KnitInit()
 	if PlatformUtil.isMobile() then
@@ -357,6 +359,7 @@ function PlayerController:_handleInput(dt: number)
 		end
 	end
 
+	-- Pump: Space/Z (keyboard), A (gamepad), touch button
 	local wantsPump = UserInputService:IsKeyDown(Enum.KeyCode.Space)
 		or UserInputService:IsKeyDown(Enum.KeyCode.Z)
 		or self._touchPump
@@ -376,6 +379,19 @@ function PlayerController:_handleInput(dt: number)
 
 	if self._isPumping then
 		return
+	end
+
+	-- Drill: E (keyboard), X (gamepad), touch button
+	local wantsDrill = UserInputService:IsKeyDown(Enum.KeyCode.E) or self._touchDrill
+	if PlatformUtil.isGamepad() then
+		wantsDrill = wantsDrill or UserInputService:IsKeyDown(Enum.KeyCode.ButtonX)
+	end
+
+	self._drillCooldown = math.max(0, self._drillCooldown - dt)
+	if wantsDrill and self._drillCooldown <= 0 then
+		self._drillCooldown = 0.3 -- cooldown between drills
+		local PlayerService = Knit.GetService("PlayerService")
+		PlayerService:Drill():catch(function() end)
 	end
 
 	if dirX ~= 0 or dirY ~= 0 then
@@ -539,22 +555,24 @@ function PlayerController:_createMobileControls()
 		end)
 	end
 
-	local pumpSize = 72
+	local actionBtnSize = 72
+
+	-- Pump button (top-right action button)
 	local pumpBtn = Instance.new("TextButton")
 	pumpBtn.Name = "PumpButton"
-	pumpBtn.Size = UDim2.new(0, pumpSize, 0, pumpSize)
-	pumpBtn.Position = UDim2.new(1, -pumpSize - 24, 1, -pumpSize - 60)
+	pumpBtn.Size = UDim2.new(0, actionBtnSize, 0, actionBtnSize)
+	pumpBtn.Position = UDim2.new(1, -actionBtnSize - 24, 1, -actionBtnSize * 2 - 80)
 	pumpBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 	pumpBtn.BackgroundTransparency = 0.2
 	pumpBtn.TextColor3 = Color3.new(1, 1, 1)
-	pumpBtn.TextSize = 18
+	pumpBtn.TextSize = 16
 	pumpBtn.Font = Enum.Font.Arcade
 	pumpBtn.Text = "PUMP"
 	pumpBtn.Parent = gui
 
-	local corner = Instance.new("UICorner")
-	corner.CornerRadius = UDim.new(0.5, 0)
-	corner.Parent = pumpBtn
+	local pumpCorner = Instance.new("UICorner")
+	pumpCorner.CornerRadius = UDim.new(0.5, 0)
+	pumpCorner.Parent = pumpBtn
 
 	pumpBtn.InputBegan:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.Touch then
@@ -564,6 +582,34 @@ function PlayerController:_createMobileControls()
 	pumpBtn.InputEnded:Connect(function(input)
 		if input.UserInputType == Enum.UserInputType.Touch then
 			self._touchPump = false
+		end
+	end)
+
+	-- Drill button (bottom-right action button)
+	local drillBtn = Instance.new("TextButton")
+	drillBtn.Name = "DrillButton"
+	drillBtn.Size = UDim2.new(0, actionBtnSize, 0, actionBtnSize)
+	drillBtn.Position = UDim2.new(1, -actionBtnSize - 24, 1, -actionBtnSize - 60)
+	drillBtn.BackgroundColor3 = Color3.fromRGB(50, 120, 200)
+	drillBtn.BackgroundTransparency = 0.2
+	drillBtn.TextColor3 = Color3.new(1, 1, 1)
+	drillBtn.TextSize = 16
+	drillBtn.Font = Enum.Font.Arcade
+	drillBtn.Text = "DRILL"
+	drillBtn.Parent = gui
+
+	local drillCorner = Instance.new("UICorner")
+	drillCorner.CornerRadius = UDim.new(0.5, 0)
+	drillCorner.Parent = drillBtn
+
+	drillBtn.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Touch then
+			self._touchDrill = true
+		end
+	end)
+	drillBtn.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.Touch then
+			self._touchDrill = false
 		end
 	end)
 end
