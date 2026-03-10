@@ -127,9 +127,9 @@ function SoundController:KnitStart()
 	-- Enemy pop
 	EnemyService.EnemyPopped:Connect(function(id: number)
 		local EnemyController = Knit.GetController("EnemyController")
-		local part = EnemyController._enemyParts[id]
-		if part then
-			self:PlaySoundAt("EnemyPop", part.Position)
+		local model = EnemyController._enemyModels[id]
+		if model and model.PrimaryPart then
+			self:PlaySoundAt("EnemyPop", model.PrimaryPart.Position)
 		else
 			self:PlaySound("EnemyPop")
 		end

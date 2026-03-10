@@ -57,10 +57,64 @@ DigDugConfig.EnemyType = {
 
 -- Visual colors
 DigDugConfig.ISLAND_COLOR = Color3.fromRGB(210, 180, 120) -- sandy tan
-DigDugConfig.WATER_COLOR = Color3.fromRGB(40, 100, 200)   -- ocean blue
-DigDugConfig.SUNK_COLOR = Color3.fromRGB(30, 80, 170)     -- darker blue (recently sunk)
+DigDugConfig.ISLAND_GRASS_COLOR = Color3.fromRGB(60, 160, 50) -- grass edge
+DigDugConfig.WATER_COLOR = Color3.fromRGB(40, 100, 200) -- ocean blue
+DigDugConfig.SUNK_COLOR = Color3.fromRGB(30, 80, 170) -- darker blue (recently sunk)
 DigDugConfig.FAULT_INTACT_COLOR = Color3.fromRGB(140, 110, 70) -- subtle brown crack
 DigDugConfig.FAULT_DRILLED_COLOR = Color3.fromRGB(255, 60, 60) -- bright red drilled
+
+-- Player visual colors
+DigDugConfig.PLAYER_BODY_COLOR = Color3.fromRGB(240, 240, 240) -- white suit
+DigDugConfig.PLAYER_HELMET_COLOR = Color3.fromRGB(50, 120, 220) -- blue helmet
+DigDugConfig.PLAYER_VISOR_COLOR = Color3.fromRGB(180, 220, 255) -- light blue visor
+
+-- Enemy visual colors
+DigDugConfig.POOKA_COLOR = Color3.fromRGB(230, 50, 50) -- red
+DigDugConfig.POOKA_GOGGLE_COLOR = Color3.fromRGB(255, 220, 80) -- yellow goggles
+DigDugConfig.FYGAR_COLOR = Color3.fromRGB(50, 180, 50) -- green
+DigDugConfig.FYGAR_BELLY_COLOR = Color3.fromRGB(200, 200, 60) -- yellow belly
+
+-- Stage visual themes (indexed by stage, wraps at 5)
+DigDugConfig.StageThemes = {
+	{ -- Stage 1-2: Bright day
+		skyColor = Color3.fromRGB(135, 200, 250),
+		waterTint = Color3.fromRGB(40, 100, 200),
+		ambientColor = Color3.fromRGB(120, 140, 160),
+		clockTime = 14,
+		brightness = 1.5,
+	},
+	{ -- Stage 3-4: Afternoon
+		skyColor = Color3.fromRGB(180, 200, 230),
+		waterTint = Color3.fromRGB(50, 110, 180),
+		ambientColor = Color3.fromRGB(140, 130, 120),
+		clockTime = 16,
+		brightness = 1.3,
+	},
+	{ -- Stage 5-6: Sunset
+		skyColor = Color3.fromRGB(220, 150, 100),
+		waterTint = Color3.fromRGB(80, 90, 160),
+		ambientColor = Color3.fromRGB(160, 120, 100),
+		clockTime = 18,
+		brightness = 1.1,
+	},
+	{ -- Stage 7-8: Dusk
+		skyColor = Color3.fromRGB(80, 60, 120),
+		waterTint = Color3.fromRGB(30, 50, 130),
+		ambientColor = Color3.fromRGB(100, 80, 120),
+		clockTime = 20,
+		brightness = 0.8,
+	},
+	{ -- Stage 9-10: Night
+		skyColor = Color3.fromRGB(20, 20, 50),
+		waterTint = Color3.fromRGB(15, 30, 80),
+		ambientColor = Color3.fromRGB(60, 60, 100),
+		clockTime = 0,
+		brightness = 0.5,
+	},
+}
+
+-- Decoration settings
+DigDugConfig.DECORATION_DENSITY = 0.08 -- chance per island cell to spawn a decoration
 
 -- Scoring
 DigDugConfig.Scoring = {
@@ -69,11 +123,11 @@ DigDugConfig.Scoring = {
 	-- Fygar kill by pump
 	FYGAR_PUMP = 400,
 	-- Chunk kills (by number of enemies sunk)
-	CHUNK_KILL_1 = 1000,  -- 1 enemy sunk
-	CHUNK_KILL_2 = 2500,  -- 2 enemies sunk
-	CHUNK_KILL_3 = 4000,  -- 3 enemies sunk
-	CHUNK_KILL_4 = 6000,  -- 4 enemies sunk
-	CHUNK_KILL_5 = 8000,  -- 5+ enemies sunk
+	CHUNK_KILL_1 = 1000, -- 1 enemy sunk
+	CHUNK_KILL_2 = 2500, -- 2 enemies sunk
+	CHUNK_KILL_3 = 4000, -- 3 enemies sunk
+	CHUNK_KILL_4 = 6000, -- 4 enemies sunk
+	CHUNK_KILL_5 = 8000, -- 5+ enemies sunk
 	-- Drilling
 	DRILL_FAULT = 10,
 	-- Last enemy fleeing
