@@ -305,7 +305,7 @@ function GameController:_showStartScreen()
 	title.TextColor3 = Color3.fromRGB(255, 200, 0)
 	title.TextSize = scaled(if isMobile then 44 else 60)
 	title.Font = Enum.Font.Arcade
-	title.Text = "DIG DUG"
+	title.Text = "DIG DUG II"
 	title.Parent = frame
 
 	-- High score on start screen
@@ -326,11 +326,11 @@ function GameController:_showStartScreen()
 	-- Controls info
 	local controlsText: string
 	if isGamepad then
-		controlsText = "D-PAD: MOVE  |  A: PUMP"
+		controlsText = "D-PAD: MOVE  |  A: PUMP\nWALK ACROSS FAULT LINES TO DRILL THEM!"
 	elseif isMobile then
-		controlsText = "D-PAD: MOVE  |  PUMP BUTTON: PUMP"
+		controlsText = "D-PAD: MOVE  |  PUMP BUTTON: PUMP\nWALK ACROSS FAULT LINES TO DRILL THEM!"
 	else
-		controlsText = "WASD/ARROWS: MOVE  |  SPACE: PUMP"
+		controlsText = "WASD/ARROWS: MOVE  |  SPACE: PUMP\nWALK ACROSS FAULT LINES TO DRILL THEM!"
 	end
 
 	local controls = Instance.new("TextLabel")

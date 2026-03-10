@@ -155,7 +155,6 @@ function PlayerController:_setupGamepad()
 		return
 	end
 
-	-- Listen for gamepad Start button to trigger game start
 	UserInputService.InputBegan:Connect(function(input, gameProcessed)
 		if gameProcessed then
 			return
@@ -287,13 +286,16 @@ function PlayerController:_updatePumpPosition()
 		return
 	end
 
-	local dir3 = Vector3.new(self._facingDir.X, -self._facingDir.Y, 0)
+	-- Top-down: pump extends on XZ plane
+	local dir3 = Vector3.new(self._facingDir.X, 0, self._facingDir.Y)
 	local hoseLength = CELL_SIZE * DigDugConfig.PUMP_RANGE * 0.5
 
 	if math.abs(self._facingDir.X) > 0 then
+		-- Horizontal pump hose
 		self._pumpPart.Size = Vector3.new(hoseLength, CELL_SIZE * 0.15, CELL_SIZE * 0.15)
 	else
-		self._pumpPart.Size = Vector3.new(CELL_SIZE * 0.15, hoseLength, CELL_SIZE * 0.15)
+		-- Vertical pump hose (along Z axis)
+		self._pumpPart.Size = Vector3.new(CELL_SIZE * 0.15, CELL_SIZE * 0.15, hoseLength)
 	end
 
 	self._pumpPart.Position = myPart.Position + dir3 * (hoseLength / 2)
@@ -315,7 +317,7 @@ function PlayerController:_createMobileControls()
 	dpad.BackgroundTransparency = 1
 	dpad.Parent = gui
 
-	local btnSize = 64 -- 56+ minimum touch target with padding
+	local btnSize = 64
 	local directions = {
 		{ name = "U", pos = UDim2.new(0.5, -btnSize / 2, 0, 0), dx = 0, dy = -1 },
 		{ name = "D", pos = UDim2.new(0.5, -btnSize / 2, 1, -btnSize), dx = 0, dy = 1 },

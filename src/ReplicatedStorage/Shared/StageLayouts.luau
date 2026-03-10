@@ -1,17 +1,16 @@
 --!strict
--- Predefined stage layouts for stages 1-10. Stage 11+ uses procedural generation.
--- Each layout defines: enemy spawn positions, rock positions, and tunnel segments.
+-- Stage layouts for Dig Dug II. Each layout defines an island shape, fault lines, and enemy spawns.
+-- Stages 1-10 are hand-crafted. Stage 11+ uses procedural generation.
 
 local DigDugConfig = require(script.Parent.DigDugConfig)
 
 local COLS = DigDugConfig.GRID_COLUMNS
 local ROWS = DigDugConfig.GRID_ROWS
 
-export type TunnelSegment = {
+export type FaultLine = {
 	type: "horizontal" | "vertical",
-	col: number,
 	row: number,
-	length: number,
+	col: number,
 }
 
 export type EnemySpawn = {
@@ -20,331 +19,575 @@ export type EnemySpawn = {
 	row: number,
 }
 
-export type RockPos = {
-	col: number,
-	row: number,
-}
-
 export type StageLayout = {
-	tunnels: { TunnelSegment },
+	islandMask: { { boolean } }, -- [row][col] = true means island
+	faults: { FaultLine },
 	enemies: { EnemySpawn },
-	rocks: { RockPos },
+	playerSpawn: Vector2?,
 }
 
 local P = DigDugConfig.EnemyType.POOKA
 local F = DigDugConfig.EnemyType.FYGAR
 
+-- Helper: create a rectangular island mask with optional cutouts
+local function makeIslandMask(template: { string }): { { boolean } }
+	local mask = {}
+	for row = 1, ROWS do
+		mask[row] = {}
+		local line = template[row]
+		for col = 1, COLS do
+			if line and col <= #line then
+				mask[row][col] = string.sub(line, col, col) == "#"
+			else
+				mask[row][col] = false
+			end
+		end
+	end
+	return mask
+end
+
+-- Stage templates: '#' = island, '.' = water
+-- Grid is 16x16. Water border surrounds island shapes.
+
 local StageLayouts: { [number]: StageLayout } = {
-	-- Stage 1: Easy. Generous tunnels, enemies spread out, 2 rocks.
+	-- Stage 1: Simple rectangle island. Easy intro.
 	[1] = {
-		tunnels = {
-			-- Player area
-			{ type = "horizontal", col = 5, row = 1, length = 4 },
-			-- Layer 1: wide open tunnel
-			{ type = "horizontal", col = 2, row = 4, length = 10 },
-			{ type = "vertical", col = 4, row = 2, length = 3 },
-			{ type = "vertical", col = 10, row = 2, length = 3 },
-			-- Layer 2: medium tunnel
-			{ type = "horizontal", col = 3, row = 8, length = 8 },
-			{ type = "vertical", col = 6, row = 5, length = 4 },
-			-- Layer 3: small pocket
-			{ type = "horizontal", col = 5, row = 12, length = 5 },
-			{ type = "vertical", col = 8, row = 9, length = 4 },
+		islandMask = makeIslandMask({
+			"................",
+			"................",
+			"...##########...",
+			"...##########...",
+			"...##########...",
+			"...##########...",
+			"...##########...",
+			"...##########...",
+			"...##########...",
+			"...##########...",
+			"...##########...",
+			"...##########...",
+			"...##########...",
+			"...##########...",
+			"................",
+			"................",
+		}),
+		faults = {
+			{ type = "horizontal", row = 5, col = 4 },
+			{ type = "horizontal", row = 5, col = 5 },
+			{ type = "horizontal", row = 5, col = 6 },
+			{ type = "horizontal", row = 5, col = 7 },
+			{ type = "vertical", row = 6, col = 7 },
+			{ type = "vertical", row = 7, col = 7 },
+			{ type = "horizontal", row = 8, col = 4 },
+			{ type = "horizontal", row = 8, col = 5 },
+			{ type = "horizontal", row = 8, col = 6 },
+			{ type = "horizontal", row = 8, col = 7 },
+			{ type = "horizontal", row = 10, col = 8 },
+			{ type = "horizontal", row = 10, col = 9 },
+			{ type = "horizontal", row = 10, col = 10 },
+			{ type = "horizontal", row = 10, col = 11 },
+			{ type = "horizontal", row = 10, col = 12 },
 		},
 		enemies = {
-			{ enemyType = P, col = 3, row = 4 },
-			{ enemyType = P, col = 9, row = 4 },
-			{ enemyType = P, col = 5, row = 8 },
-			{ enemyType = F, col = 7, row = 12 },
+			{ enemyType = P, col = 5, row = 4 },
+			{ enemyType = P, col = 10, row = 4 },
+			{ enemyType = P, col = 7, row = 12 },
+			{ enemyType = F, col = 10, row = 12 },
 		},
-		rocks = {
-			{ col = 5, row = 3 },
-			{ col = 11, row = 7 },
-		},
+		playerSpawn = Vector2.new(8, 8),
 	},
 
-	-- Stage 2: Slightly harder. More vertical tunnels, enemies a bit deeper.
+	-- Stage 2: L-shaped island
 	[2] = {
-		tunnels = {
-			{ type = "horizontal", col = 6, row = 1, length = 3 },
-			{ type = "horizontal", col = 3, row = 4, length = 5 },
-			{ type = "horizontal", col = 9, row = 5, length = 4 },
-			{ type = "vertical", col = 5, row = 2, length = 3 },
-			{ type = "vertical", col = 11, row = 2, length = 4 },
-			{ type = "horizontal", col = 2, row = 9, length = 6 },
-			{ type = "horizontal", col = 8, row = 10, length = 5 },
-			{ type = "vertical", col = 4, row = 5, length = 5 },
-			{ type = "vertical", col = 10, row = 6, length = 5 },
-			{ type = "horizontal", col = 4, row = 14, length = 6 },
+		islandMask = makeIslandMask({
+			"................",
+			"................",
+			"..########......",
+			"..########......",
+			"..########......",
+			"..########......",
+			"..########......",
+			"..########......",
+			"..############..",
+			"..############..",
+			"..############..",
+			"..############..",
+			"..############..",
+			"..############..",
+			"................",
+			"................",
+		}),
+		faults = {
+			{ type = "vertical", row = 3, col = 6 },
+			{ type = "vertical", row = 4, col = 6 },
+			{ type = "vertical", row = 5, col = 6 },
+			{ type = "horizontal", row = 5, col = 3 },
+			{ type = "horizontal", row = 5, col = 4 },
+			{ type = "horizontal", row = 5, col = 5 },
+			{ type = "horizontal", row = 8, col = 7 },
+			{ type = "horizontal", row = 8, col = 8 },
+			{ type = "horizontal", row = 8, col = 9 },
+			{ type = "horizontal", row = 8, col = 10 },
+			{ type = "vertical", row = 9, col = 10 },
+			{ type = "vertical", row = 10, col = 10 },
+			{ type = "vertical", row = 11, col = 10 },
+			{ type = "horizontal", row = 11, col = 3 },
+			{ type = "horizontal", row = 11, col = 4 },
+			{ type = "horizontal", row = 11, col = 5 },
+			{ type = "horizontal", row = 11, col = 6 },
 		},
 		enemies = {
 			{ enemyType = P, col = 4, row = 4 },
-			{ enemyType = P, col = 10, row = 5 },
-			{ enemyType = P, col = 3, row = 9 },
-			{ enemyType = F, col = 6, row = 14 },
+			{ enemyType = P, col = 8, row = 4 },
+			{ enemyType = P, col = 5, row = 10 },
+			{ enemyType = F, col = 12, row = 12 },
 		},
-		rocks = {
-			{ col = 3, row = 3 },
-			{ col = 12, row = 8 },
-		},
+		playerSpawn = Vector2.new(6, 8),
 	},
 
-	-- Stage 3: Two Fygars now. Tunnels less connected.
+	-- Stage 3: Cross/plus shaped island
 	[3] = {
-		tunnels = {
-			{ type = "horizontal", col = 6, row = 1, length = 3 },
-			{ type = "vertical", col = 7, row = 2, length = 3 },
-			{ type = "horizontal", col = 2, row = 5, length = 4 },
-			{ type = "horizontal", col = 10, row = 4, length = 3 },
-			{ type = "vertical", col = 3, row = 6, length = 4 },
-			{ type = "horizontal", col = 5, row = 9, length = 5 },
-			{ type = "vertical", col = 11, row = 5, length = 5 },
-			{ type = "horizontal", col = 3, row = 13, length = 4 },
-			{ type = "horizontal", col = 9, row = 13, length = 4 },
-			{ type = "vertical", col = 7, row = 10, length = 4 },
+		islandMask = makeIslandMask({
+			"................",
+			"......####......",
+			"......####......",
+			"......####......",
+			"...##########...",
+			"...##########...",
+			"...##########...",
+			"...##########...",
+			"...##########...",
+			"...##########...",
+			"...##########...",
+			"...##########...",
+			"......####......",
+			"......####......",
+			"......####......",
+			"................",
+		}),
+		faults = {
+			{ type = "horizontal", row = 4, col = 7 },
+			{ type = "horizontal", row = 4, col = 8 },
+			{ type = "horizontal", row = 4, col = 9 },
+			{ type = "vertical", row = 5, col = 6 },
+			{ type = "vertical", row = 6, col = 6 },
+			{ type = "vertical", row = 7, col = 6 },
+			{ type = "vertical", row = 5, col = 10 },
+			{ type = "vertical", row = 6, col = 10 },
+			{ type = "vertical", row = 7, col = 10 },
+			{ type = "horizontal", row = 8, col = 4 },
+			{ type = "horizontal", row = 8, col = 5 },
+			{ type = "horizontal", row = 8, col = 6 },
+			{ type = "horizontal", row = 8, col = 10 },
+			{ type = "horizontal", row = 8, col = 11 },
+			{ type = "horizontal", row = 8, col = 12 },
+			{ type = "horizontal", row = 11, col = 7 },
+			{ type = "horizontal", row = 11, col = 8 },
+			{ type = "horizontal", row = 11, col = 9 },
 		},
 		enemies = {
-			{ enemyType = P, col = 3, row = 5 },
-			{ enemyType = P, col = 11, row = 4 },
-			{ enemyType = F, col = 7, row = 9 },
-			{ enemyType = F, col = 4, row = 13 },
+			{ enemyType = P, col = 8, row = 2 },
+			{ enemyType = P, col = 5, row = 7 },
+			{ enemyType = F, col = 11, row = 7 },
+			{ enemyType = F, col = 8, row = 13 },
 		},
-		rocks = {
-			{ col = 6, row = 3 },
-			{ col = 10, row = 7 },
-			{ col = 4, row = 11 },
-		},
+		playerSpawn = Vector2.new(8, 8),
 	},
 
-	-- Stage 4: More enemies, tighter spaces.
+	-- Stage 4: Two-peninsula island
 	[4] = {
-		tunnels = {
-			{ type = "horizontal", col = 6, row = 1, length = 3 },
-			{ type = "vertical", col = 7, row = 2, length = 2 },
-			{ type = "horizontal", col = 2, row = 4, length = 3 },
-			{ type = "horizontal", col = 10, row = 4, length = 3 },
-			{ type = "vertical", col = 4, row = 5, length = 3 },
-			{ type = "horizontal", col = 5, row = 8, length = 4 },
-			{ type = "vertical", col = 11, row = 5, length = 4 },
-			{ type = "horizontal", col = 2, row = 12, length = 5 },
-			{ type = "horizontal", col = 9, row = 11, length = 4 },
-			{ type = "vertical", col = 6, row = 9, length = 4 },
+		islandMask = makeIslandMask({
+			"................",
+			"................",
+			"..####....####..",
+			"..####....####..",
+			"..####....####..",
+			"..####....####..",
+			"..##########..",
+			"..############..",
+			"..############..",
+			"..############..",
+			"..############..",
+			"..############..",
+			"..############..",
+			"..############..",
+			"................",
+			"................",
+		}),
+		faults = {
+			{ type = "horizontal", row = 6, col = 3 },
+			{ type = "horizontal", row = 6, col = 4 },
+			{ type = "horizontal", row = 6, col = 5 },
+			{ type = "horizontal", row = 6, col = 11 },
+			{ type = "horizontal", row = 6, col = 12 },
+			{ type = "horizontal", row = 6, col = 13 },
+			{ type = "horizontal", row = 9, col = 3 },
+			{ type = "horizontal", row = 9, col = 4 },
+			{ type = "horizontal", row = 9, col = 5 },
+			{ type = "horizontal", row = 9, col = 6 },
+			{ type = "vertical", row = 7, col = 8 },
+			{ type = "vertical", row = 8, col = 8 },
+			{ type = "vertical", row = 9, col = 8 },
+			{ type = "horizontal", row = 11, col = 8 },
+			{ type = "horizontal", row = 11, col = 9 },
+			{ type = "horizontal", row = 11, col = 10 },
+			{ type = "horizontal", row = 11, col = 11 },
+			{ type = "horizontal", row = 11, col = 12 },
 		},
 		enemies = {
-			{ enemyType = P, col = 3, row = 4 },
-			{ enemyType = P, col = 11, row = 4 },
-			{ enemyType = F, col = 6, row = 8 },
-			{ enemyType = F, col = 3, row = 12 },
-		},
-		rocks = {
-			{ col = 5, row = 3 },
-			{ col = 9, row = 6 },
-			{ col = 7, row = 10 },
-		},
-	},
-
-	-- Stage 5: Five enemies total.
-	[5] = {
-		tunnels = {
-			{ type = "horizontal", col = 6, row = 1, length = 3 },
-			{ type = "vertical", col = 8, row = 2, length = 3 },
-			{ type = "horizontal", col = 2, row = 4, length = 4 },
-			{ type = "horizontal", col = 10, row = 5, length = 3 },
-			{ type = "vertical", col = 3, row = 5, length = 4 },
-			{ type = "vertical", col = 12, row = 6, length = 3 },
-			{ type = "horizontal", col = 5, row = 8, length = 5 },
-			{ type = "horizontal", col = 2, row = 12, length = 4 },
-			{ type = "horizontal", col = 8, row = 13, length = 5 },
-			{ type = "vertical", col = 6, row = 9, length = 4 },
-			{ type = "vertical", col = 10, row = 9, length = 5 },
-		},
-		enemies = {
-			{ enemyType = P, col = 3, row = 4 },
-			{ enemyType = P, col = 11, row = 5 },
-			{ enemyType = P, col = 3, row = 12 },
-			{ enemyType = F, col = 7, row = 8 },
-			{ enemyType = F, col = 10, row = 13 },
-		},
-		rocks = {
-			{ col = 4, row = 3 },
-			{ col = 9, row = 7 },
-			{ col = 5, row = 11 },
-		},
-	},
-
-	-- Stage 6: Three Fygars. Disconnected chambers.
-	[6] = {
-		tunnels = {
-			{ type = "horizontal", col = 6, row = 1, length = 3 },
-			{ type = "vertical", col = 6, row = 2, length = 2 },
-			{ type = "horizontal", col = 2, row = 4, length = 3 },
-			{ type = "horizontal", col = 11, row = 3, length = 2 },
-			{ type = "vertical", col = 12, row = 4, length = 3 },
-			{ type = "horizontal", col = 5, row = 7, length = 4 },
-			{ type = "horizontal", col = 2, row = 10, length = 3 },
-			{ type = "vertical", col = 8, row = 8, length = 4 },
-			{ type = "horizontal", col = 9, row = 12, length = 4 },
-			{ type = "horizontal", col = 3, row = 14, length = 5 },
-			{ type = "vertical", col = 4, row = 5, length = 6 },
-		},
-		enemies = {
-			{ enemyType = P, col = 3, row = 4 },
+			{ enemyType = P, col = 4, row = 3 },
 			{ enemyType = P, col = 12, row = 3 },
-			{ enemyType = F, col = 6, row = 7 },
-			{ enemyType = F, col = 3, row = 10 },
+			{ enemyType = F, col = 5, row = 10 },
+			{ enemyType = F, col = 11, row = 12 },
+		},
+		playerSpawn = Vector2.new(8, 9),
+	},
+
+	-- Stage 5: Large island with internal fault network, 5 enemies
+	[5] = {
+		islandMask = makeIslandMask({
+			"................",
+			"...##########...",
+			"..############..",
+			"..############..",
+			"..############..",
+			"..############..",
+			"..############..",
+			"..############..",
+			"..############..",
+			"..############..",
+			"..############..",
+			"..############..",
+			"..############..",
+			"...##########...",
+			"................",
+			"................",
+		}),
+		faults = {
+			{ type = "vertical", row = 2, col = 6 },
+			{ type = "vertical", row = 3, col = 6 },
+			{ type = "vertical", row = 4, col = 6 },
+			{ type = "horizontal", row = 4, col = 3 },
+			{ type = "horizontal", row = 4, col = 4 },
+			{ type = "horizontal", row = 4, col = 5 },
+			{ type = "vertical", row = 2, col = 10 },
+			{ type = "vertical", row = 3, col = 10 },
+			{ type = "vertical", row = 4, col = 10 },
+			{ type = "horizontal", row = 4, col = 10 },
+			{ type = "horizontal", row = 4, col = 11 },
+			{ type = "horizontal", row = 4, col = 12 },
+			{ type = "horizontal", row = 7, col = 5 },
+			{ type = "horizontal", row = 7, col = 6 },
+			{ type = "horizontal", row = 7, col = 7 },
+			{ type = "horizontal", row = 7, col = 8 },
+			{ type = "horizontal", row = 7, col = 9 },
+			{ type = "horizontal", row = 7, col = 10 },
+			{ type = "horizontal", row = 10, col = 3 },
+			{ type = "horizontal", row = 10, col = 4 },
+			{ type = "horizontal", row = 10, col = 5 },
+			{ type = "horizontal", row = 10, col = 6 },
+			{ type = "vertical", row = 10, col = 9 },
+			{ type = "vertical", row = 11, col = 9 },
+			{ type = "vertical", row = 12, col = 9 },
+		},
+		enemies = {
+			{ enemyType = P, col = 4, row = 3 },
+			{ enemyType = P, col = 12, row = 3 },
+			{ enemyType = P, col = 4, row = 12 },
+			{ enemyType = F, col = 8, row = 6 },
+			{ enemyType = F, col = 11, row = 11 },
+		},
+		playerSpawn = Vector2.new(8, 8),
+	},
+
+	-- Stage 6: Narrow bridge island (hourglass)
+	[6] = {
+		islandMask = makeIslandMask({
+			"................",
+			"..##########....",
+			"..##########....",
+			"..##########....",
+			"..##########....",
+			"....######......",
+			"......####......",
+			"......####......",
+			"......####......",
+			"....######......",
+			"..##########....",
+			"..##########....",
+			"..##########....",
+			"..##########....",
+			"................",
+			"................",
+		}),
+		faults = {
+			{ type = "horizontal", row = 4, col = 3 },
+			{ type = "horizontal", row = 4, col = 4 },
+			{ type = "horizontal", row = 4, col = 5 },
+			{ type = "horizontal", row = 4, col = 6 },
+			{ type = "horizontal", row = 4, col = 7 },
+			{ type = "horizontal", row = 4, col = 8 },
+			{ type = "horizontal", row = 4, col = 9 },
+			{ type = "horizontal", row = 4, col = 10 },
+			{ type = "horizontal", row = 9, col = 5 },
+			{ type = "horizontal", row = 9, col = 6 },
+			{ type = "horizontal", row = 9, col = 7 },
+			{ type = "horizontal", row = 9, col = 8 },
+			{ type = "horizontal", row = 9, col = 9 },
+			{ type = "horizontal", row = 9, col = 10 },
+			{ type = "vertical", row = 2, col = 6 },
+			{ type = "vertical", row = 3, col = 6 },
+			{ type = "vertical", row = 11, col = 6 },
+			{ type = "vertical", row = 12, col = 6 },
+		},
+		enemies = {
+			{ enemyType = P, col = 4, row = 2 },
+			{ enemyType = P, col = 9, row = 2 },
+			{ enemyType = F, col = 4, row = 12 },
+			{ enemyType = F, col = 9, row = 12 },
+			{ enemyType = F, col = 8, row = 7 },
+		},
+		playerSpawn = Vector2.new(8, 8),
+	},
+
+	-- Stage 7: Large irregular island, 6 enemies
+	[7] = {
+		islandMask = makeIslandMask({
+			"................",
+			"....########....",
+			"...##########...",
+			"..############..",
+			"..############..",
+			"..############..",
+			".#############..",
+			".##############.",
+			".##############.",
+			"..############..",
+			"..############..",
+			"..############..",
+			"...##########...",
+			"....########....",
+			"................",
+			"................",
+		}),
+		faults = {
+			{ type = "horizontal", row = 3, col = 5 },
+			{ type = "horizontal", row = 3, col = 6 },
+			{ type = "horizontal", row = 3, col = 7 },
+			{ type = "vertical", row = 4, col = 7 },
+			{ type = "vertical", row = 5, col = 7 },
+			{ type = "horizontal", row = 5, col = 4 },
+			{ type = "horizontal", row = 5, col = 5 },
+			{ type = "horizontal", row = 5, col = 6 },
+			{ type = "vertical", row = 4, col = 11 },
+			{ type = "vertical", row = 5, col = 11 },
+			{ type = "vertical", row = 6, col = 11 },
+			{ type = "horizontal", row = 7, col = 3 },
+			{ type = "horizontal", row = 7, col = 4 },
+			{ type = "horizontal", row = 7, col = 5 },
+			{ type = "horizontal", row = 7, col = 6 },
+			{ type = "horizontal", row = 7, col = 7 },
+			{ type = "horizontal", row = 10, col = 7 },
+			{ type = "horizontal", row = 10, col = 8 },
+			{ type = "horizontal", row = 10, col = 9 },
+			{ type = "horizontal", row = 10, col = 10 },
+			{ type = "horizontal", row = 10, col = 11 },
+			{ type = "vertical", row = 8, col = 5 },
+			{ type = "vertical", row = 9, col = 5 },
+			{ type = "vertical", row = 10, col = 5 },
+		},
+		enemies = {
+			{ enemyType = P, col = 6, row = 2 },
+			{ enemyType = P, col = 10, row = 4 },
+			{ enemyType = P, col = 3, row = 8 },
+			{ enemyType = F, col = 12, row = 8 },
+			{ enemyType = F, col = 6, row = 12 },
 			{ enemyType = F, col = 10, row = 12 },
 		},
-		rocks = {
-			{ col = 5, row = 3 },
-			{ col = 11, row = 6 },
-			{ col = 7, row = 10 },
-			{ col = 4, row = 13 },
-		},
+		playerSpawn = Vector2.new(8, 7),
 	},
 
-	-- Stage 7: Six enemies. Maze-like.
-	[7] = {
-		tunnels = {
-			{ type = "horizontal", col = 6, row = 1, length = 3 },
-			{ type = "vertical", col = 7, row = 2, length = 2 },
-			{ type = "horizontal", col = 2, row = 3, length = 3 },
-			{ type = "horizontal", col = 11, row = 4, length = 2 },
-			{ type = "vertical", col = 3, row = 4, length = 3 },
-			{ type = "horizontal", col = 5, row = 6, length = 4 },
-			{ type = "vertical", col = 12, row = 5, length = 4 },
-			{ type = "horizontal", col = 2, row = 9, length = 4 },
-			{ type = "horizontal", col = 8, row = 9, length = 4 },
-			{ type = "vertical", col = 6, row = 7, length = 4 },
-			{ type = "vertical", col = 10, row = 10, length = 3 },
-			{ type = "horizontal", col = 3, row = 13, length = 4 },
-			{ type = "horizontal", col = 9, row = 14, length = 4 },
-			{ type = "vertical", col = 5, row = 11, length = 3 },
-		},
-		enemies = {
-			{ enemyType = P, col = 3, row = 3 },
-			{ enemyType = P, col = 12, row = 4 },
-			{ enemyType = P, col = 3, row = 9 },
-			{ enemyType = F, col = 6, row = 6 },
-			{ enemyType = F, col = 10, row = 9 },
-			{ enemyType = F, col = 4, row = 13 },
-		},
-		rocks = {
-			{ col = 4, row = 2 },
-			{ col = 9, row = 5 },
-			{ col = 7, row = 8 },
-			{ col = 11, row = 12 },
-		},
-	},
-
-	-- Stage 8: Six enemies, deep Fygars.
+	-- Stage 8: Ring/donut island
 	[8] = {
-		tunnels = {
-			{ type = "horizontal", col = 6, row = 1, length = 3 },
-			{ type = "vertical", col = 8, row = 2, length = 3 },
-			{ type = "horizontal", col = 2, row = 4, length = 3 },
-			{ type = "horizontal", col = 10, row = 3, length = 3 },
-			{ type = "vertical", col = 4, row = 5, length = 3 },
-			{ type = "vertical", col = 11, row = 4, length = 4 },
-			{ type = "horizontal", col = 5, row = 7, length = 3 },
-			{ type = "horizontal", col = 2, row = 10, length = 4 },
-			{ type = "horizontal", col = 9, row = 10, length = 4 },
-			{ type = "vertical", col = 7, row = 8, length = 4 },
-			{ type = "horizontal", col = 3, row = 14, length = 3 },
-			{ type = "horizontal", col = 8, row = 14, length = 4 },
-			{ type = "vertical", col = 5, row = 11, length = 4 },
-			{ type = "vertical", col = 10, row = 11, length = 4 },
+		islandMask = makeIslandMask({
+			"................",
+			"....########....",
+			"...##########...",
+			"..############..",
+			"..###......###..",
+			"..###......###..",
+			"..###......###..",
+			"..###......###..",
+			"..###......###..",
+			"..###......###..",
+			"..############..",
+			"...##########...",
+			"....########....",
+			"................",
+			"................",
+			"................",
+		}),
+		faults = {
+			{ type = "horizontal", row = 3, col = 5 },
+			{ type = "horizontal", row = 3, col = 6 },
+			{ type = "horizontal", row = 3, col = 7 },
+			{ type = "horizontal", row = 3, col = 8 },
+			{ type = "horizontal", row = 3, col = 9 },
+			{ type = "horizontal", row = 3, col = 10 },
+			{ type = "horizontal", row = 3, col = 11 },
+			{ type = "vertical", row = 4, col = 5 },
+			{ type = "vertical", row = 5, col = 5 },
+			{ type = "vertical", row = 6, col = 5 },
+			{ type = "vertical", row = 7, col = 5 },
+			{ type = "vertical", row = 4, col = 12 },
+			{ type = "vertical", row = 5, col = 12 },
+			{ type = "vertical", row = 6, col = 12 },
+			{ type = "vertical", row = 7, col = 12 },
+			{ type = "horizontal", row = 10, col = 5 },
+			{ type = "horizontal", row = 10, col = 6 },
+			{ type = "horizontal", row = 10, col = 7 },
+			{ type = "horizontal", row = 10, col = 8 },
+			{ type = "horizontal", row = 10, col = 9 },
+			{ type = "horizontal", row = 10, col = 10 },
+			{ type = "horizontal", row = 10, col = 11 },
 		},
 		enemies = {
-			{ enemyType = P, col = 3, row = 4 },
-			{ enemyType = P, col = 11, row = 3 },
-			{ enemyType = P, col = 3, row = 10 },
-			{ enemyType = F, col = 6, row = 7 },
-			{ enemyType = F, col = 10, row = 10 },
-			{ enemyType = F, col = 9, row = 14 },
-		},
-		rocks = {
-			{ col = 5, row = 3 },
-			{ col = 9, row = 6 },
-			{ col = 3, row = 9 },
-			{ col = 12, row = 12 },
-		},
-	},
-
-	-- Stage 9: Seven enemies. Minimal tunnels.
-	[9] = {
-		tunnels = {
-			{ type = "horizontal", col = 6, row = 1, length = 3 },
-			{ type = "vertical", col = 7, row = 2, length = 2 },
-			{ type = "horizontal", col = 2, row = 4, length = 3 },
-			{ type = "horizontal", col = 10, row = 4, length = 3 },
-			{ type = "vertical", col = 4, row = 5, length = 2 },
-			{ type = "vertical", col = 11, row = 5, length = 2 },
-			{ type = "horizontal", col = 3, row = 7, length = 3 },
-			{ type = "horizontal", col = 9, row = 8, length = 3 },
-			{ type = "vertical", col = 6, row = 6, length = 3 },
-			{ type = "horizontal", col = 5, row = 11, length = 4 },
-			{ type = "vertical", col = 8, row = 9, length = 3 },
-			{ type = "horizontal", col = 2, row = 14, length = 4 },
-			{ type = "horizontal", col = 9, row = 14, length = 4 },
-			{ type = "vertical", col = 4, row = 12, length = 3 },
-			{ type = "vertical", col = 11, row = 12, length = 3 },
-		},
-		enemies = {
-			{ enemyType = P, col = 3, row = 4 },
-			{ enemyType = P, col = 11, row = 4 },
+			{ enemyType = P, col = 8, row = 2 },
 			{ enemyType = P, col = 4, row = 7 },
-			{ enemyType = P, col = 10, row = 8 },
-			{ enemyType = F, col = 6, row = 11 },
-			{ enemyType = F, col = 3, row = 14 },
-			{ enemyType = F, col = 11, row = 14 },
+			{ enemyType = P, col = 13, row = 7 },
+			{ enemyType = F, col = 8, row = 11 },
+			{ enemyType = F, col = 4, row = 4 },
+			{ enemyType = F, col = 13, row = 4 },
 		},
-		rocks = {
-			{ col = 5, row = 3 },
-			{ col = 9, row = 6 },
-			{ col = 3, row = 10 },
-			{ col = 12, row = 11 },
-		},
+		playerSpawn = Vector2.new(8, 3),
 	},
 
-	-- Stage 10: Eight enemies. Dense, hard.
-	[10] = {
-		tunnels = {
-			{ type = "horizontal", col = 6, row = 1, length = 3 },
-			{ type = "vertical", col = 7, row = 2, length = 2 },
-			{ type = "horizontal", col = 2, row = 3, length = 2 },
-			{ type = "horizontal", col = 11, row = 3, length = 2 },
-			{ type = "vertical", col = 3, row = 4, length = 2 },
-			{ type = "vertical", col = 12, row = 4, length = 2 },
-			{ type = "horizontal", col = 5, row = 6, length = 4 },
-			{ type = "horizontal", col = 2, row = 8, length = 3 },
-			{ type = "horizontal", col = 10, row = 8, length = 3 },
-			{ type = "vertical", col = 6, row = 7, length = 2 },
-			{ type = "vertical", col = 9, row = 7, length = 2 },
-			{ type = "horizontal", col = 3, row = 11, length = 3 },
-			{ type = "horizontal", col = 9, row = 11, length = 4 },
-			{ type = "vertical", col = 5, row = 9, length = 3 },
-			{ type = "vertical", col = 11, row = 9, length = 3 },
-			{ type = "horizontal", col = 4, row = 14, length = 3 },
-			{ type = "horizontal", col = 9, row = 15, length = 3 },
-			{ type = "vertical", col = 7, row = 12, length = 4 },
+	-- Stage 9: Archipelago — two connected masses, 7 enemies
+	[9] = {
+		islandMask = makeIslandMask({
+			"................",
+			"..########......",
+			"..########......",
+			"..########......",
+			"..########......",
+			"..########......",
+			"..########......",
+			".....#####......",
+			"......#####.....",
+			"......########..",
+			"......########..",
+			"......########..",
+			"......########..",
+			"......########..",
+			"......########..",
+			"................",
+		}),
+		faults = {
+			{ type = "horizontal", row = 3, col = 3 },
+			{ type = "horizontal", row = 3, col = 4 },
+			{ type = "horizontal", row = 3, col = 5 },
+			{ type = "vertical", row = 2, col = 6 },
+			{ type = "vertical", row = 3, col = 6 },
+			{ type = "vertical", row = 4, col = 6 },
+			{ type = "horizontal", row = 5, col = 3 },
+			{ type = "horizontal", row = 5, col = 4 },
+			{ type = "horizontal", row = 5, col = 5 },
+			{ type = "horizontal", row = 5, col = 6 },
+			{ type = "horizontal", row = 5, col = 7 },
+			{ type = "horizontal", row = 5, col = 8 },
+			{ type = "horizontal", row = 11, col = 7 },
+			{ type = "horizontal", row = 11, col = 8 },
+			{ type = "horizontal", row = 11, col = 9 },
+			{ type = "horizontal", row = 11, col = 10 },
+			{ type = "horizontal", row = 11, col = 11 },
+			{ type = "horizontal", row = 11, col = 12 },
+			{ type = "vertical", row = 10, col = 10 },
+			{ type = "vertical", row = 11, col = 10 },
+			{ type = "vertical", row = 12, col = 10 },
+			{ type = "vertical", row = 13, col = 10 },
 		},
 		enemies = {
-			{ enemyType = P, col = 2, row = 3 },
-			{ enemyType = P, col = 12, row = 3 },
+			{ enemyType = P, col = 4, row = 2 },
+			{ enemyType = P, col = 8, row = 2 },
+			{ enemyType = P, col = 5, row = 5 },
+			{ enemyType = P, col = 9, row = 11 },
+			{ enemyType = F, col = 8, row = 13 },
+			{ enemyType = F, col = 12, row = 13 },
+			{ enemyType = F, col = 3, row = 4 },
+		},
+		playerSpawn = Vector2.new(6, 4),
+	},
+
+	-- Stage 10: Maximum challenge. Large complex island, 8 enemies, many fault segments
+	[10] = {
+		islandMask = makeIslandMask({
+			"................",
+			"..############..",
+			"..############..",
+			".#############..",
+			".##############.",
+			".##############.",
+			".##############.",
+			".##############.",
+			".##############.",
+			".##############.",
+			".##############.",
+			".##############.",
+			"..############..",
+			"..############..",
+			"...##########...",
+			"................",
+		}),
+		faults = {
+			-- Top horizontal cut
+			{ type = "horizontal", row = 3, col = 4 },
+			{ type = "horizontal", row = 3, col = 5 },
+			{ type = "horizontal", row = 3, col = 6 },
+			{ type = "horizontal", row = 3, col = 7 },
+			-- Top right vertical cut
+			{ type = "vertical", row = 2, col = 10 },
+			{ type = "vertical", row = 3, col = 10 },
+			-- Mid-left horizontal
+			{ type = "horizontal", row = 6, col = 2 },
+			{ type = "horizontal", row = 6, col = 3 },
+			{ type = "horizontal", row = 6, col = 4 },
+			{ type = "horizontal", row = 6, col = 5 },
+			-- Center vertical
+			{ type = "vertical", row = 5, col = 8 },
+			{ type = "vertical", row = 6, col = 8 },
+			{ type = "vertical", row = 7, col = 8 },
+			-- Center right horizontal
+			{ type = "horizontal", row = 7, col = 9 },
+			{ type = "horizontal", row = 7, col = 10 },
+			{ type = "horizontal", row = 7, col = 11 },
+			{ type = "horizontal", row = 7, col = 12 },
+			{ type = "horizontal", row = 7, col = 13 },
+			-- Bottom left
+			{ type = "horizontal", row = 10, col = 3 },
+			{ type = "horizontal", row = 10, col = 4 },
+			{ type = "horizontal", row = 10, col = 5 },
+			{ type = "vertical", row = 10, col = 5 },
+			{ type = "vertical", row = 11, col = 5 },
+			{ type = "vertical", row = 12, col = 5 },
+			-- Bottom right
+			{ type = "vertical", row = 9, col = 12 },
+			{ type = "vertical", row = 10, col = 12 },
+			{ type = "vertical", row = 11, col = 12 },
+			{ type = "horizontal", row = 11, col = 8 },
+			{ type = "horizontal", row = 11, col = 9 },
+			{ type = "horizontal", row = 11, col = 10 },
+			{ type = "horizontal", row = 11, col = 11 },
+		},
+		enemies = {
+			{ enemyType = P, col = 4, row = 2 },
+			{ enemyType = P, col = 12, row = 2 },
 			{ enemyType = P, col = 3, row = 8 },
-			{ enemyType = P, col = 11, row = 8 },
-			{ enemyType = F, col = 6, row = 6 },
-			{ enemyType = F, col = 4, row = 11 },
-			{ enemyType = F, col = 10, row = 11 },
-			{ enemyType = F, col = 5, row = 14 },
+			{ enemyType = P, col = 13, row = 5 },
+			{ enemyType = F, col = 6, row = 5 },
+			{ enemyType = F, col = 11, row = 10 },
+			{ enemyType = F, col = 4, row = 12 },
+			{ enemyType = F, col = 10, row = 13 },
 		},
-		rocks = {
-			{ col = 4, row = 2 },
-			{ col = 10, row = 5 },
-			{ col = 3, row = 7 },
-			{ col = 12, row = 10 },
-			{ col = 6, row = 13 },
-		},
+		playerSpawn = Vector2.new(8, 8),
 	},
 }
 
@@ -359,53 +602,86 @@ function StageLayoutsModule.GenerateProceduralLayout(stage: number): StageLayout
 	local enemyCount = math.min(4 + math.floor(stage / 2), 10)
 	local pookaCount = math.max(2, math.floor(enemyCount * 0.5))
 	local fygarCount = enemyCount - pookaCount
-	local rockCount = math.min(3 + math.floor(stage / 3), 6)
 
-	local tunnels: { TunnelSegment } = {}
-	local enemies: { EnemySpawn } = {}
-	local rocks: { RockPos } = {}
+	-- Generate an irregular island using distance from center
+	local centerR = ROWS / 2
+	local centerC = COLS / 2
+	local baseRadius = 5.5 + math.min(stage * 0.1, 2)
 
-	-- Player spawn tunnel
-	table.insert(tunnels, { type = "horizontal", col = 6, row = 1, length = 3 })
-
-	-- Generate tunnel chambers at different depths
-	local chamberRows = { 4, 7, 10, 13, 15 }
-	for _, row in chamberRows do
-		if row <= ROWS then
-			local col = math.random(2, COLS - 4)
-			local length = math.random(3, 5)
-			table.insert(tunnels, { type = "horizontal", col = col, row = row, length = length })
+	local mask: { { boolean } } = {}
+	for row = 1, ROWS do
+		mask[row] = {}
+		for col = 1, COLS do
+			local dist = math.sqrt((row - centerR) ^ 2 + (col - centerC) ^ 2)
+			-- Add noise based on angle for irregular shape
+			local angle = math.atan2(row - centerR, col - centerC)
+			local noise = math.sin(angle * 3 + stage) * 1.2 + math.cos(angle * 5 + stage * 2) * 0.8
+			mask[row][col] = dist < (baseRadius + noise) and row > 1 and row < ROWS and col > 1 and col < COLS
 		end
 	end
 
-	-- Connect with vertical tunnels
-	for _ = 1, 4 do
-		local col = math.random(3, COLS - 2)
-		local startRow = math.random(2, 6)
-		local length = math.random(3, 5)
-		table.insert(tunnels, { type = "vertical", col = col, row = startRow, length = length })
+	-- Generate fault lines along grid edges within the island
+	local faults: { FaultLine } = {}
+	local faultCount = math.min(15 + stage * 2, 40)
+
+	for _ = 1, faultCount do
+		local isHorizontal = math.random() > 0.5
+		local row = math.random(2, ROWS - 2)
+		local col = math.random(2, COLS - 2)
+
+		if isHorizontal then
+			-- Horizontal fault between (row, col) and (row+1, col)
+			if row < ROWS and mask[row][col] and mask[row + 1][col] then
+				table.insert(faults, { type = "horizontal", row = row, col = col })
+			end
+		else
+			-- Vertical fault between (row, col) and (row, col+1)
+			if col < COLS and mask[row][col] and mask[row][col + 1] then
+				table.insert(faults, { type = "vertical", row = row, col = col })
+			end
+		end
 	end
 
-	-- Place enemies in tunnel areas
+	-- Place enemies on island cells
+	local islandCells: { Vector2 } = {}
+	for row = 1, ROWS do
+		for col = 1, COLS do
+			if mask[row][col] then
+				table.insert(islandCells, Vector2.new(col, row))
+			end
+		end
+	end
+
+	local enemies: { EnemySpawn } = {}
+	local usedCells: { [string]: boolean } = {}
+
+	-- Player spawn at center
+	local playerSpawn = Vector2.new(math.floor(centerC), math.floor(centerR))
+	usedCells[`{playerSpawn.X}_{playerSpawn.Y}`] = true
+
 	for i = 1, pookaCount do
-		local row = chamberRows[math.min(i, #chamberRows)]
-		local col = math.random(2, COLS - 1)
-		table.insert(enemies, { enemyType = P, col = col, row = row })
+		local cell = islandCells[math.random(1, #islandCells)]
+		local key = `{cell.X}_{cell.Y}`
+		if not usedCells[key] then
+			table.insert(enemies, { enemyType = P, col = cell.X, row = cell.Y })
+			usedCells[key] = true
+		end
 	end
 	for i = 1, fygarCount do
-		local row = chamberRows[math.min(pookaCount + i, #chamberRows)]
-		local col = math.random(2, COLS - 1)
-		table.insert(enemies, { enemyType = F, col = col, row = row })
+		local cell = islandCells[math.random(1, #islandCells)]
+		local key = `{cell.X}_{cell.Y}`
+		if not usedCells[key] then
+			table.insert(enemies, { enemyType = F, col = cell.X, row = cell.Y })
+			usedCells[key] = true
+		end
 	end
 
-	-- Place rocks
-	for i = 1, rockCount do
-		local col = math.random(2, COLS - 1)
-		local row = math.min(2 + i * 3, ROWS - 2)
-		table.insert(rocks, { col = col, row = row })
-	end
-
-	return { tunnels = tunnels, enemies = enemies, rocks = rocks }
+	return {
+		islandMask = mask,
+		faults = faults,
+		enemies = enemies,
+		playerSpawn = playerSpawn,
+	}
 end
 
 return StageLayoutsModule

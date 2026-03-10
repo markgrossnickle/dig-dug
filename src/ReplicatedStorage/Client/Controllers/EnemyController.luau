@@ -34,15 +34,15 @@ function EnemyController:KnitStart()
 	end)
 
 	EnemyService.EnemyPopped:Connect(function(id: number)
-		self:_onEnemyDefeated(id)
+		self:_onEnemyDefeated(id, false)
 	end)
 
-	EnemyService.EnemyCrushed:Connect(function(id: number)
-		self:_onEnemyDefeated(id)
+	EnemyService.EnemyChunkKilled:Connect(function(id: number)
+		self:_onEnemyDefeated(id, true)
 	end)
 
 	EnemyService.EnemyDefeated:Connect(function(id: number)
-		self:_onEnemyDefeated(id)
+		self:_onEnemyDefeated(id, false)
 	end)
 
 	EnemyService.FygarFire:Connect(function(enemyId: number, col: number, row: number, dirX: number, range: number)
@@ -119,11 +119,9 @@ function EnemyController:_onEnemyInflated(id: number, inflateLevel: number)
 		return
 	end
 
-	-- Scale up the enemy as it inflates
 	local scale = 1 + (inflateLevel * 0.2)
 	part.Size = Vector3.new(CELL_SIZE * 0.8 * scale, CELL_SIZE * 0.8 * scale, CELL_SIZE * 0.8 * scale)
 
-	-- Change color to indicate inflation
 	local baseColor = part.Color
 	local whiteBlend = inflateLevel / DigDugConfig.PUMP_POPS_REQUIRED
 	part.Color = baseColor:Lerp(Color3.new(1, 1, 1), whiteBlend * 0.5)
@@ -134,7 +132,6 @@ function EnemyController:_onEnemyFleeing(id: number)
 	if not part then
 		return
 	end
-	-- Flash the enemy white/pink to indicate fleeing
 	task.spawn(function()
 		while part and part.Parent do
 			part.Color = Color3.fromRGB(255, 180, 255)
@@ -148,7 +145,7 @@ function EnemyController:_onEnemyFleeing(id: number)
 	end)
 end
 
-function EnemyController:_onEnemyDefeated(id: number)
+function EnemyController:_onEnemyDefeated(id: number, chunkKill: boolean)
 	local part = self._enemyParts[id]
 	if not part then
 		return
@@ -157,26 +154,40 @@ function EnemyController:_onEnemyDefeated(id: number)
 	local deathPos = part.Position
 	local deathColor = part.Color
 
-	-- Quick pop animation
-	task.spawn(function()
-		for i = 1, 5 do
-			if not part or not part.Parent then
-				break
+	if chunkKill then
+		-- Chunk kill: sink animation (enemy goes down with the island chunk)
+		task.spawn(function()
+			for i = 1, 15 do
+				if not part or not part.Parent then
+					break
+				end
+				part.Position = part.Position - Vector3.new(0, 0.2, 0)
+				part.Transparency = i / 15
+				task.wait(0.06)
 			end
-			part.Size = part.Size * 1.1
-			part.Transparency = i / 5
-			task.wait(0.05)
-		end
-		if part and part.Parent then
-			part:Destroy()
-		end
+			if part and part.Parent then
+				part:Destroy()
+			end
+		end)
+	else
+		-- Pop animation
+		task.spawn(function()
+			for i = 1, 5 do
+				if not part or not part.Parent then
+					break
+				end
+				part.Size = part.Size * 1.1
+				part.Transparency = i / 5
+				task.wait(0.05)
+			end
+			if part and part.Parent then
+				part:Destroy()
+			end
 
-		-- Particle burst
-		self:_spawnPopParticles(deathPos, deathColor)
-
-		-- Show score popup at death position
-		self:_showScorePopup(deathPos)
-	end)
+			self:_spawnPopParticles(deathPos, deathColor)
+			self:_showScorePopup(deathPos)
+		end)
+	end
 
 	self._enemyParts[id] = nil
 end
@@ -196,15 +207,16 @@ function EnemyController:_spawnPopParticles(pos: Vector3, color: Color3)
 		particle.Parent = workspace
 
 		local angle = (i / count) * math.pi * 2
+		-- Particles spread on XZ plane (top-down view)
 		local velX = math.cos(angle) * 6
-		local velY = math.sin(angle) * 6
+		local velZ = math.sin(angle) * 6
 
 		task.spawn(function()
 			for step = 1, 12 do
 				if not particle or not particle.Parent then
 					break
 				end
-				particle.Position = particle.Position + Vector3.new(velX * 0.02, velY * 0.02, 0)
+				particle.Position = particle.Position + Vector3.new(velX * 0.02, 0, velZ * 0.02)
 				particle.Transparency = step / 12
 				particle.Size = particle.Size * 0.9
 				task.wait(0.03)
@@ -219,7 +231,7 @@ end
 function EnemyController:_showScorePopup(worldPos: Vector3)
 	local billboardGui = Instance.new("BillboardGui")
 	billboardGui.Size = UDim2.new(0, 80, 0, 40)
-	billboardGui.StudsOffset = Vector3.new(0, 2, 0)
+	billboardGui.StudsOffset = Vector3.new(0, 3, 0)
 	billboardGui.AlwaysOnTop = true
 
 	local anchor = Instance.new("Part")
@@ -243,7 +255,6 @@ function EnemyController:_showScorePopup(worldPos: Vector3)
 	label.Text = "POP!"
 	label.Parent = billboardGui
 
-	-- Float up and fade
 	task.spawn(function()
 		for i = 1, 20 do
 			anchor.Position = anchor.Position + Vector3.new(0, 0.1, 0)
@@ -269,7 +280,7 @@ function EnemyController:_onFygarFire(_enemyId: number, col: number, row: number
 			local fireCol = col + dirX * i
 			local worldPos = GridController:GridToWorld(fireCol, row)
 
-			-- Layered fire parts per cell (fewer on mobile)
+			-- Layered fire parts (fewer on mobile)
 			local fireLayers = if PlatformUtil.isMobile() then 1 else 3
 			for j = 1, fireLayers do
 				local fire = Instance.new("Part")
@@ -277,8 +288,9 @@ function EnemyController:_onFygarFire(_enemyId: number, col: number, row: number
 				fire.Anchored = true
 				fire.CanCollide = false
 				local scale = 1.1 - (j * 0.2)
+				-- Fire on XZ plane
 				fire.Size = Vector3.new(CELL_SIZE * 0.7 * scale, CELL_SIZE * 0.5 * scale, CELL_SIZE * 0.5 * scale)
-				fire.Position = worldPos + Vector3.new(0, (j - 2) * 0.3, (j - 2) * 0.2)
+				fire.Position = worldPos + Vector3.new(0, (j - 1) * 0.3, 0)
 				fire.Color = fireColors[j]
 				fire.Material = Enum.Material.Neon
 				fire.Transparency = 0.1 + (j * 0.1)

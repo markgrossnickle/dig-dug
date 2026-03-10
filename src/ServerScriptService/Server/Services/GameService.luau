@@ -5,6 +5,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Knit = require(ReplicatedStorage.Packages.Knit)
 local Signal = require(ReplicatedStorage.Packages.Signal)
 local DigDugConfig = require(ReplicatedStorage.Shared.DigDugConfig)
+local StageLayouts = require(ReplicatedStorage.Shared.StageLayouts)
 
 local GameService = Knit.CreateService({
 	Name = "GameService",
@@ -99,17 +100,19 @@ function GameService:StartStage(player: Player)
 	local GridService = Knit.GetService("GridService")
 	GridService:ResetGrid(data.stage)
 
+	-- Get layout for player spawn position
+	local layout = StageLayouts.GetLayout(data.stage)
+	if not layout then
+		layout = StageLayouts.GenerateProceduralLayout(data.stage)
+	end
+
 	-- Spawn player
 	local PlayerService = Knit.GetService("PlayerService")
-	PlayerService:SpawnPlayer(player)
+	PlayerService:SpawnPlayer(player, layout.playerSpawn)
 
 	-- Spawn enemies
 	local EnemyService = Knit.GetService("EnemyService")
 	EnemyService:SpawnEnemies(data.stage, player)
-
-	-- Init rocks
-	local RockService = Knit.GetService("RockService")
-	RockService:InitRocks(player)
 
 	self.Client.StageChanged:Fire(player, data.stage)
 	self.Client.GameStateChanged:Fire(player, data.state)
@@ -143,8 +146,6 @@ function GameService:OnPlayerDied(player: Player)
 
 	local EnemyService = Knit.GetService("EnemyService")
 	EnemyService:StopAI()
-	local RockService = Knit.GetService("RockService")
-	RockService:Stop()
 	local PumpService = Knit.GetService("PumpService")
 	PumpService:ClearAll()
 
@@ -172,8 +173,6 @@ function GameService:OnStageClear(player: Player)
 
 	data.state = self.State.STAGE_CLEAR
 
-	local RockService = Knit.GetService("RockService")
-	RockService:Stop()
 	local PumpService = Knit.GetService("PumpService")
 	PumpService:ClearAll()
 

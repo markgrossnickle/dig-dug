@@ -1,6 +1,7 @@
 --!strict
 local Lighting = game:GetService("Lighting")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local TweenService = game:GetService("TweenService")
 
 local Knit = require(ReplicatedStorage.Packages.Knit)
 local DigDugConfig = require(ReplicatedStorage.Shared.DigDugConfig)
@@ -18,12 +19,12 @@ local GridController = Knit.CreateController({
 GridController._gridFolder = nil :: Folder?
 GridController._cells = {} :: { { Part? } }
 GridController._gridData = {} :: { { number } }
-GridController._rockParts = {} :: { [string]: Part }
+GridController._faultParts = {} :: { [string]: Part }
 
 function GridController:KnitInit()
 	self._gridData = {}
 	self._cells = {}
-	self._rockParts = {}
+	self._faultParts = {}
 end
 
 function GridController:KnitStart()
@@ -33,8 +34,16 @@ function GridController:KnitStart()
 		self:_updateCell(col, row, cellType)
 	end)
 
-	GridService.GridReset:Connect(function(gridData: { { number } }, rockData: { { number } }, _stage: number)
-		self:_buildGrid(gridData, rockData)
+	GridService.GridReset:Connect(function(gridData: { { number } }, faultData: { { any } }, _stage: number)
+		self:_buildGrid(gridData, faultData)
+	end)
+
+	GridService.FaultDrilled:Connect(function(faultType: string, row: number, col: number)
+		self:_onFaultDrilled(faultType, row, col)
+	end)
+
+	GridService.ChunkSinking:Connect(function(sinkingCells: { { number } })
+		self:_onChunkSinking(sinkingCells)
 	end)
 
 	-- Clean up default workspace objects
@@ -45,30 +54,33 @@ function GridController:KnitStart()
 end
 
 function GridController:_cleanWorkspace()
-	-- Remove default baseplate if it exists
 	local baseplate = workspace:FindFirstChild("Baseplate")
 	if baseplate then
 		baseplate:Destroy()
 	end
 
-	-- Remove any default spawn location
 	local spawn = workspace:FindFirstChild("SpawnLocation")
 	if spawn then
 		spawn:Destroy()
 	end
 
-	-- Set ambient lighting for the game
-	Lighting.Ambient = Color3.fromRGB(80, 80, 80)
-	Lighting.Brightness = 1
+	-- Set ambient lighting for top-down ocean view
+	Lighting.Ambient = Color3.fromRGB(100, 120, 140)
+	Lighting.Brightness = 1.5
 	Lighting.ClockTime = 14
 	Lighting.FogEnd = 1000
 end
 
 function GridController:GridToWorld(col: number, row: number): Vector3
-	return Vector3.new(ORIGIN.X + (col - 0.5) * CELL_SIZE, ORIGIN.Y - (row - 0.5) * CELL_SIZE, ORIGIN.Z)
+	-- Top-down: X = col, Z = row, Y = surface height
+	return Vector3.new(
+		ORIGIN.X + (col - 0.5) * CELL_SIZE,
+		0.5, -- slightly above Y=0 for island surface
+		ORIGIN.Z + (row - 0.5) * CELL_SIZE
+	)
 end
 
-function GridController:_buildGrid(gridData: { { number } }, rockData: { { number } })
+function GridController:_buildGrid(gridData: { { number } }, faultData: { { any } })
 	-- Clean up old grid
 	if self._gridFolder then
 		self._gridFolder:Destroy()
@@ -79,13 +91,10 @@ function GridController:_buildGrid(gridData: { { number } }, rockData: { { numbe
 	self._gridFolder.Parent = workspace
 
 	self._cells = {}
-	self._rockParts = {}
+	self._faultParts = {}
 	self._gridData = gridData
 
-	-- Create sky/surface row above the grid
-	self:_createSurface()
-
-	-- Create grid cells
+	-- Create grid cells on XZ plane
 	for row = 1, ROWS do
 		self._cells[row] = {}
 		for col = 1, COLS do
@@ -94,67 +103,45 @@ function GridController:_buildGrid(gridData: { { number } }, rockData: { { numbe
 		end
 	end
 
-	-- Create rocks
-	for _, rockPos in rockData do
-		self:_createRock(rockPos[1], rockPos[2])
+	-- Create fault line visuals
+	for _, fault in faultData do
+		local fType = fault[1] :: string
+		local fRow = fault[2] :: number
+		local fCol = fault[3] :: number
+		local fState = fault[4] :: number
+		self:_createFaultPart(fType, fRow, fCol, fState)
 	end
-
-	-- Create boundary walls
-	self:_createBoundaries()
 
 	-- Set up camera
 	self:_setupCamera()
-end
-
-function GridController:_createSurface()
-	-- Sky background
-	local sky = Instance.new("Part")
-	sky.Name = "Sky"
-	sky.Anchored = true
-	sky.Size = Vector3.new(COLS * CELL_SIZE, CELL_SIZE * 2, CELL_SIZE)
-	sky.Position = Vector3.new(ORIGIN.X + (COLS * CELL_SIZE) / 2, ORIGIN.Y + CELL_SIZE, ORIGIN.Z)
-	sky.Color = DigDugConfig.SKY_COLOR
-	sky.Material = Enum.Material.SmoothPlastic
-	sky.Parent = self._gridFolder
-
-	-- Grass strip
-	local grass = Instance.new("Part")
-	grass.Name = "Grass"
-	grass.Anchored = true
-	grass.Size = Vector3.new(COLS * CELL_SIZE, CELL_SIZE * 0.3, CELL_SIZE)
-	grass.Position = Vector3.new(ORIGIN.X + (COLS * CELL_SIZE) / 2, ORIGIN.Y + CELL_SIZE * 0.15, ORIGIN.Z)
-	grass.Color = DigDugConfig.SURFACE_COLOR
-	grass.Material = Enum.Material.Grass
-	grass.Parent = self._gridFolder
-end
-
-function GridController:_getColorForCell(_col: number, row: number): Color3
-	for _, layer in DigDugConfig.DepthLayers do
-		if row >= layer.startRow and row <= layer.endRow then
-			return layer.color
-		end
-	end
-	return DigDugConfig.DepthLayers[#DigDugConfig.DepthLayers].color
 end
 
 function GridController:_createCell(col: number, row: number, cellType: number)
 	local part = Instance.new("Part")
 	part.Name = `Cell_{col}_{row}`
 	part.Anchored = true
-	part.Size = Vector3.new(CELL_SIZE, CELL_SIZE, CELL_SIZE)
-	part.Position = self:GridToWorld(col, row)
-	part.Material = Enum.Material.SmoothPlastic
+	part.Size = Vector3.new(CELL_SIZE, CELL_SIZE * 0.5, CELL_SIZE)
 	part.TopSurface = Enum.SurfaceType.Smooth
 	part.BottomSurface = Enum.SurfaceType.Smooth
 
-	if cellType == CellType.EMPTY or cellType == CellType.TUNNEL then
-		part.Color = DigDugConfig.TUNNEL_COLOR
-		part.Transparency = 0
-		part.Material = Enum.Material.Neon
+	if cellType == CellType.ISLAND then
+		part.Position = Vector3.new(
+			ORIGIN.X + (col - 0.5) * CELL_SIZE,
+			0,
+			ORIGIN.Z + (row - 0.5) * CELL_SIZE
+		)
+		part.Color = DigDugConfig.ISLAND_COLOR
+		part.Material = Enum.Material.Sand
 	else
-		-- DIRT and ROCK cells both show the earth layer color
-		part.Color = self:_getColorForCell(col, row)
-		part.Transparency = 0
+		-- Water or Sunk
+		part.Position = Vector3.new(
+			ORIGIN.X + (col - 0.5) * CELL_SIZE,
+			-0.3,
+			ORIGIN.Z + (row - 0.5) * CELL_SIZE
+		)
+		part.Color = DigDugConfig.WATER_COLOR
+		part.Material = Enum.Material.Water
+		part.Transparency = 0.15
 	end
 
 	part.Parent = self._gridFolder
@@ -170,66 +157,123 @@ function GridController:_updateCell(col: number, row: number, cellType: number)
 		return
 	end
 
-	if cellType == CellType.EMPTY or cellType == CellType.TUNNEL then
-		part.Color = DigDugConfig.TUNNEL_COLOR
+	if cellType == CellType.ISLAND then
+		part.Color = DigDugConfig.ISLAND_COLOR
+		part.Material = Enum.Material.Sand
+		part.Position = Vector3.new(
+			ORIGIN.X + (col - 0.5) * CELL_SIZE,
+			0,
+			ORIGIN.Z + (row - 0.5) * CELL_SIZE
+		)
+		part.Transparency = 0
+	elseif cellType == CellType.SUNK then
+		part.Color = DigDugConfig.SUNK_COLOR
+		part.Material = Enum.Material.Water
+		part.Transparency = 0.15
+	else
+		part.Color = DigDugConfig.WATER_COLOR
+		part.Material = Enum.Material.Water
+		part.Transparency = 0.15
+	end
+end
+
+function GridController:_createFaultPart(fType: string, row: number, col: number, state: number)
+	local part = Instance.new("Part")
+	part.Anchored = true
+	part.CanCollide = false
+
+	local faultThickness = CELL_SIZE * 0.08
+
+	if fType == "h" then
+		-- Horizontal fault: between (row,col) and (row+1,col) — runs along X axis
+		part.Name = `Fault_h_{row}_{col}`
+		part.Size = Vector3.new(CELL_SIZE * 0.9, faultThickness, faultThickness)
+		part.Position = Vector3.new(
+			ORIGIN.X + (col - 0.5) * CELL_SIZE,
+			0.3,
+			ORIGIN.Z + row * CELL_SIZE -- between row and row+1
+		)
+	else
+		-- Vertical fault: between (row,col) and (row,col+1) — runs along Z axis
+		part.Name = `Fault_v_{row}_{col}`
+		part.Size = Vector3.new(faultThickness, faultThickness, CELL_SIZE * 0.9)
+		part.Position = Vector3.new(
+			ORIGIN.X + col * CELL_SIZE, -- between col and col+1
+			0.3,
+			ORIGIN.Z + (row - 0.5) * CELL_SIZE
+		)
+	end
+
+	if state == DigDugConfig.FaultState.DRILLED then
+		part.Color = DigDugConfig.FAULT_DRILLED_COLOR
 		part.Material = Enum.Material.Neon
-		part.Transparency = 0
-	elseif cellType == CellType.DIRT then
-		part.Color = self:_getColorForCell(col, row)
-		part.Material = Enum.Material.SmoothPlastic
-		part.Transparency = 0
+	else
+		part.Color = DigDugConfig.FAULT_INTACT_COLOR
+		part.Material = Enum.Material.Slate
 	end
 
-	-- Remove rock part if exists
-	local key = `{col}_{row}`
-	if self._rockParts[key] then
-		self._rockParts[key]:Destroy()
-		self._rockParts[key] = nil
+	part.Parent = self._gridFolder
+
+	local key = `{fType}_{row}_{col}`
+	self._faultParts[key] = part
+end
+
+function GridController:_onFaultDrilled(faultType: string, row: number, col: number)
+	local typeKey = if faultType == "horizontal" then "h" else "v"
+	local key = `{typeKey}_{row}_{col}`
+	local part = self._faultParts[key]
+	if part then
+		part.Color = DigDugConfig.FAULT_DRILLED_COLOR
+		part.Material = Enum.Material.Neon
 	end
 end
 
-function GridController:_createRock(col: number, row: number)
-	local rock = Instance.new("Part")
-	rock.Name = `Rock_{col}_{row}`
-	rock.Anchored = true
-	rock.Size = Vector3.new(CELL_SIZE * 0.9, CELL_SIZE * 0.9, CELL_SIZE * 0.9)
-	rock.Position = self:GridToWorld(col, row)
-	rock.Color = Color3.fromRGB(128, 128, 128)
-	rock.Material = Enum.Material.Slate
-	rock.Shape = Enum.PartType.Block
-	rock.Parent = self._gridFolder
+function GridController:_onChunkSinking(sinkingCells: { { number } })
+	-- Animate sinking: tween cells down and fade, then convert to water
+	for _, cell in sinkingCells do
+		local col, row = cell[1], cell[2]
+		local part = self._cells[row] and self._cells[row][col]
+		if part then
+			-- Tween down and fade
+			local targetPos = part.Position - Vector3.new(0, 3, 0)
+			local tweenInfo = TweenInfo.new(DigDugConfig.CHUNK_SINK_TIME, Enum.EasingStyle.Quad, Enum.EasingDirection.In)
+			local tween = TweenService:Create(part, tweenInfo, {
+				Position = targetPos,
+				Transparency = 0.9,
+			})
+			tween:Play()
 
-	local key = `{col}_{row}`
-	self._rockParts[key] = rock
-end
+			-- After sink, convert to water visual
+			task.delay(DigDugConfig.CHUNK_SINK_TIME + 0.1, function()
+				if part and part.Parent then
+					part.Position = Vector3.new(
+						ORIGIN.X + (col - 0.5) * CELL_SIZE,
+						-0.3,
+						ORIGIN.Z + (row - 0.5) * CELL_SIZE
+					)
+					part.Color = DigDugConfig.WATER_COLOR
+					part.Material = Enum.Material.Water
+					part.Transparency = 0.15
+				end
+			end)
+		end
 
-function GridController:_createBoundaries()
-	-- Left wall
-	local left = Instance.new("Part")
-	left.Name = "WallLeft"
-	left.Anchored = true
-	left.Size = Vector3.new(CELL_SIZE * 0.5, (ROWS + 2) * CELL_SIZE, CELL_SIZE)
-	left.Position = Vector3.new(ORIGIN.X - CELL_SIZE * 0.25, ORIGIN.Y - (ROWS / 2 - 1) * CELL_SIZE, ORIGIN.Z)
-	left.Color = Color3.fromRGB(40, 40, 40)
-	left.Material = Enum.Material.SmoothPlastic
-	left.Parent = self._gridFolder
-
-	-- Right wall
-	local right = left:Clone()
-	right.Name = "WallRight"
-	right.Position = Vector3.new(ORIGIN.X + COLS * CELL_SIZE + CELL_SIZE * 0.25, left.Position.Y, ORIGIN.Z)
-	right.Parent = self._gridFolder
-
-	-- Bottom wall
-	local bottom = Instance.new("Part")
-	bottom.Name = "WallBottom"
-	bottom.Anchored = true
-	bottom.Size = Vector3.new((COLS + 1) * CELL_SIZE, CELL_SIZE * 0.5, CELL_SIZE)
-	bottom.Position =
-		Vector3.new(ORIGIN.X + (COLS * CELL_SIZE) / 2, ORIGIN.Y - ROWS * CELL_SIZE - CELL_SIZE * 0.25, ORIGIN.Z)
-	bottom.Color = Color3.fromRGB(40, 40, 40)
-	bottom.Material = Enum.Material.SmoothPlastic
-	bottom.Parent = self._gridFolder
+		-- Also remove any fault parts that were on these cells
+		for key, faultPart in self._faultParts do
+			-- Parse key to get fault position and check if it touches a sinking cell
+			local faultPos = faultPart.Position
+			local cellWorldX = ORIGIN.X + (col - 0.5) * CELL_SIZE
+			local cellWorldZ = ORIGIN.Z + (row - 0.5) * CELL_SIZE
+			local dist = math.abs(faultPos.X - cellWorldX) + math.abs(faultPos.Z - cellWorldZ)
+			if dist < CELL_SIZE * 1.1 then
+				task.delay(DigDugConfig.CHUNK_SINK_TIME * 0.5, function()
+					if faultPart and faultPart.Parent then
+						faultPart:Destroy()
+					end
+				end)
+			end
+		end
+	end
 end
 
 function GridController:_setupCamera()
@@ -238,32 +282,32 @@ function GridController:_setupCamera()
 		return
 	end
 
-	-- Position camera to see the full grid (2D side view)
+	-- Top-down camera looking straight down at the island
 	local centerX = ORIGIN.X + (COLS * CELL_SIZE) / 2
-	local centerY = ORIGIN.Y - (ROWS * CELL_SIZE) / 2
+	local centerZ = ORIGIN.Z + (ROWS * CELL_SIZE) / 2
 
 	-- Calculate distance to fit the grid in viewport
-	-- On portrait/narrow screens, need more distance so everything fits
-	local gridWidth = COLS * CELL_SIZE
-	local gridHeight = (ROWS + 2) * CELL_SIZE -- +2 for sky
+	local gridSize = math.max(COLS, ROWS) * CELL_SIZE
 	local viewportSize = camera.ViewportSize
 	local aspect = viewportSize.X / math.max(viewportSize.Y, 1)
 
 	local distance
 	if aspect < 1 then
-		-- Portrait mode (mobile): zoom out more to fit width
-		distance = gridWidth / (2 * math.tan(math.rad(camera.FieldOfView / 2)) * aspect)
+		-- Portrait mode: zoom out more to fit width
+		distance = gridSize / (2 * math.tan(math.rad(camera.FieldOfView / 2)) * aspect)
 	else
-		-- Landscape: fit by height or width, whichever needs more space
-		local distByHeight = gridHeight / (2 * math.tan(math.rad(camera.FieldOfView / 2)))
-		local distByWidth = gridWidth / (2 * math.tan(math.rad(camera.FieldOfView / 2)) * aspect)
+		local distByWidth = gridSize / (2 * math.tan(math.rad(camera.FieldOfView / 2)) * aspect)
+		local distByHeight = gridSize / (2 * math.tan(math.rad(camera.FieldOfView / 2)))
 		distance = math.max(distByHeight, distByWidth)
 	end
-	distance = distance * 1.1 -- small margin
+	distance = distance * 1.15 -- margin
 
 	camera.CameraType = Enum.CameraType.Scriptable
-	camera.CFrame =
-		CFrame.new(Vector3.new(centerX, centerY, ORIGIN.Z + distance), Vector3.new(centerX, centerY, ORIGIN.Z))
+	-- Look straight down
+	camera.CFrame = CFrame.new(
+		Vector3.new(centerX, distance, centerZ),
+		Vector3.new(centerX, 0, centerZ)
+	)
 end
 
 return GridController

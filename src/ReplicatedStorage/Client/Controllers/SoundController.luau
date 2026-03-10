@@ -19,11 +19,11 @@ SoundController._musicPlaying = false
 -- Roblox asset IDs for retro/arcade-style sounds
 local SoundAssets = {
 	-- SFX
-	Dig = "rbxassetid://9114083260", -- dirt dig/shovel
+	Drill = "rbxassetid://9114083260", -- crack/drill sound (repurposed dig)
 	Pump = "rbxassetid://17759294420", -- pump air whoosh
 	EnemyPop = "rbxassetid://7948526859", -- balloon pop
-	RockFall = "rbxassetid://1276167793", -- falling rocks rumble
-	RockCrush = "rbxassetid://3923230963", -- ground smash impact
+	ChunkBreak = "rbxassetid://3923230963", -- ground smash/crack for chunk breaking
+	Splash = "rbxassetid://1276167793", -- splash/water for chunk sinking
 	PlayerDeath = "rbxassetid://297237983", -- 8-bit death
 	StageClear = "rbxassetid://1837507072", -- victory fanfare
 	GameOver = "rbxassetid://4858952348", -- game over 8-bit
@@ -36,11 +36,11 @@ local SoundAssets = {
 
 -- Volume and pitch overrides per sound
 local SoundConfig: { [string]: { volume: number?, pitch: number?, looped: boolean? } } = {
-	Dig = { volume = 0.4, pitch = 1.2 },
+	Drill = { volume = 0.4, pitch = 1.4 },
 	Pump = { volume = 0.5, pitch = 1.0 },
 	EnemyPop = { volume = 0.7, pitch = 1.0 },
-	RockFall = { volume = 0.6, pitch = 1.0 },
-	RockCrush = { volume = 0.8, pitch = 1.0 },
+	ChunkBreak = { volume = 0.8, pitch = 0.8 },
+	Splash = { volume = 0.6, pitch = 1.0 },
 	PlayerDeath = { volume = 0.8, pitch = 1.0 },
 	StageClear = { volume = 0.7, pitch = 1.0 },
 	GameOver = { volume = 0.7, pitch = 1.0 },
@@ -97,16 +97,26 @@ function SoundController:KnitStart()
 	local GameService = Knit.GetService("GameService")
 	local PlayerService = Knit.GetService("PlayerService")
 	local EnemyService = Knit.GetService("EnemyService")
-	local RockService = Knit.GetService("RockService")
 	local GridService = Knit.GetService("GridService")
 
 	local GridController = Knit.GetController("GridController")
 
-	-- Dig sound: CellChanged fires when player digs dirt
-	GridService.CellChanged:Connect(function(_col: number, _row: number, cellType: number)
-		if cellType == DigDugConfig.CellType.EMPTY then
-			self:PlaySound("Dig")
-		end
+	-- Drill sound when fault is drilled
+	GridService.FaultDrilled:Connect(function(_faultType: string, row: number, col: number)
+		local worldPos = GridController:GridToWorld(col, row)
+		self:PlaySoundAt("Drill", worldPos)
+	end)
+
+	-- Chunk break + splash
+	GridService.ChunkSinking:Connect(function(sinkingCells: { { number } })
+		self:PlaySound("ChunkBreak")
+		task.delay(0.3, function()
+			if #sinkingCells > 0 then
+				local cell = sinkingCells[1]
+				local worldPos = GridController:GridToWorld(cell[1], cell[2])
+				self:PlaySoundAt("Splash", worldPos)
+			end
+		end)
 	end)
 
 	-- Pump sounds
@@ -126,9 +136,8 @@ function SoundController:KnitStart()
 		self:PlaySound("ScorePopup")
 	end)
 
-	-- Enemy crushed
-	EnemyService.EnemyCrushed:Connect(function(_id: number)
-		self:PlaySound("RockCrush")
+	-- Enemy chunk killed
+	EnemyService.EnemyChunkKilled:Connect(function(_id: number)
 		self:PlaySound("ScorePopup")
 	end)
 
@@ -136,12 +145,6 @@ function SoundController:KnitStart()
 	EnemyService.FygarFire:Connect(function(_enemyId: number, col: number, row: number, _dirX: number, _range: number)
 		local worldPos = GridController:GridToWorld(col, row)
 		self:PlaySoundAt("FygarFire", worldPos)
-	end)
-
-	-- Rock start falling
-	RockService.RockStartFalling:Connect(function(_rockId: number, col: number, row: number)
-		local worldPos = GridController:GridToWorld(col, row)
-		self:PlaySoundAt("RockFall", worldPos)
 	end)
 
 	-- Player death
@@ -169,7 +172,7 @@ function SoundController:KnitStart()
 		end)
 	end)
 
-	-- High score: check when score changes
+	-- High score
 	local prevHighScore = 0
 	GameService.ScoreChanged:Connect(function(score: number)
 		local GameController = Knit.GetController("GameController")
@@ -183,7 +186,6 @@ end
 function SoundController:PlaySound(name: string)
 	local sound = self._sounds[name]
 	if sound then
-		-- Clone for overlapping plays
 		local clone = sound:Clone()
 		clone.Parent = SoundService
 		clone.Ended:Once(function()
@@ -199,7 +201,6 @@ function SoundController:PlaySoundAt(name: string, position: Vector3)
 		return
 	end
 
-	-- Create a temporary part for spatial audio
 	local anchor = Instance.new("Part")
 	anchor.Name = "SoundAnchor"
 	anchor.Anchored = true

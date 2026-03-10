@@ -24,7 +24,6 @@ PlayerService._playerPositions = {} :: { [Player]: Vector2 }
 PlayerService._playerDirections = {} :: { [Player]: Vector2 }
 PlayerService._playerPumping = {} :: { [Player]: boolean }
 PlayerService.PlayerMoved = Signal.new()
-PlayerService.PlayerDigged = Signal.new()
 PlayerService.PumpFired = Signal.new()
 
 function PlayerService:KnitInit() end
@@ -37,8 +36,8 @@ function PlayerService:KnitStart()
 	end)
 end
 
-function PlayerService:SpawnPlayer(player: Player)
-	local spawn = DigDugConfig.PLAYER_SPAWN
+function PlayerService:SpawnPlayer(player: Player, spawnPos: Vector2?)
+	local spawn = spawnPos or DigDugConfig.PLAYER_SPAWN
 	self._playerPositions[player] = Vector2.new(spawn.X, spawn.Y)
 	self._playerDirections[player] = DigDugConfig.Direction.RIGHT
 	self._playerPumping[player] = false
@@ -85,15 +84,49 @@ function PlayerService.Client:Move(player: Player, dirX: number, dirY: number)
 		return
 	end
 
-	-- Check for rocks
-	if GridService:IsRock(newCol, newRow) then
+	-- Can only walk on island cells
+	if not GridService:IsIsland(newCol, newRow) then
 		return
 	end
 
-	-- Dig if dirt
-	if GridService:IsDirt(newCol, newRow) then
-		GridService:DigCell(newCol, newRow)
-		GameService:AddScore(player, DigDugConfig.Scoring.DIG_CELL)
+	-- Check for fault between current cell and target cell — drill it if intact
+	local faultState = GridService:GetFaultBetween(pos.X, pos.Y, newCol, newRow)
+	if faultState == DigDugConfig.FaultState.INTACT then
+		local drilled = GridService:DrillFault(pos.X, pos.Y, newCol, newRow)
+		if drilled then
+			GameService:AddScore(player, DigDugConfig.Scoring.DRILL_FAULT)
+			-- Check for chunk breaks after drilling
+			local sinkingCells = GridService:CheckChunks(player)
+			if #sinkingCells > 0 then
+				-- Check if player is on a sinking cell (they're still at old pos)
+				-- Player hasn't moved yet, check destination too
+				local playerOnSinking = false
+				for _, cell in sinkingCells do
+					if cell[1] == newCol and cell[2] == newRow then
+						playerOnSinking = true
+						break
+					end
+					if cell[1] == pos.X and cell[2] == pos.Y then
+						playerOnSinking = true
+						break
+					end
+				end
+
+				-- Kill enemies on sinking cells
+				local EnemyService = Knit.GetService("EnemyService")
+				local killed = EnemyService:KillEnemiesInCells(sinkingCells, player)
+				if killed > 0 then
+					local scoreKey = "CHUNK_KILL_" .. tostring(math.min(killed, 5))
+					local points = DigDugConfig.Scoring[scoreKey] or 1000
+					GameService:AddScore(player, points)
+				end
+
+				if playerOnSinking then
+					GameService:OnPlayerDied(player)
+					return
+				end
+			end
+		end
 	end
 
 	-- Move player

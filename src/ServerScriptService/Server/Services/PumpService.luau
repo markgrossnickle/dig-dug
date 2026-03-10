@@ -31,8 +31,8 @@ function PumpService:KnitStart()
 	end)
 
 	local EnemyService = Knit.GetService("EnemyService")
-	EnemyService.EnemyKilled:Connect(function(enemy, _player, _crushed)
-		-- Clear any pump targeting this enemy (e.g. rock crushes pumped enemy)
+	EnemyService.EnemyKilled:Connect(function(enemy, _player, _chunkKill)
+		-- Clear any pump targeting this enemy
 		for _, state in self._pumpStates do
 			if state.active and state.targetEnemyId == enemy.id then
 				state.active = false
@@ -67,10 +67,9 @@ function PumpService:_onPumpFired(player: Player)
 		return
 	end
 
-	-- Find enemy in pump direction
+	-- Find enemy in pump direction (LOS stops at water/sunk cells)
 	local enemy = EnemyService:GetEnemyInDirection(pos.X, pos.Y, dir, DigDugConfig.PUMP_RANGE)
 	if enemy then
-		-- Start pumping this enemy
 		self._pumpStates[player] = {
 			active = true,
 			targetEnemyId = enemy.id,
@@ -85,7 +84,7 @@ end
 
 function PumpService:_startPumpLoop()
 	if self._heartbeatConn then
-		return -- already running
+		return
 	end
 
 	self._heartbeatConn = RunService.Heartbeat:Connect(function(dt)
