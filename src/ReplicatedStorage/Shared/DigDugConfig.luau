@@ -4,8 +4,8 @@
 local DigDugConfig = {}
 
 -- Grid dimensions (island area including surrounding water)
-DigDugConfig.GRID_COLUMNS = 16
-DigDugConfig.GRID_ROWS = 16
+DigDugConfig.GRID_COLUMNS = 22
+DigDugConfig.GRID_ROWS = 22
 
 -- Cell size in studs
 DigDugConfig.CELL_SIZE = 4
@@ -139,7 +139,7 @@ DigDugConfig.STARTING_LIVES = 3
 DigDugConfig.EXTRA_LIFE_SCORE = 20000
 
 -- Player spawn position (grid coordinates) — default center, overridden per stage
-DigDugConfig.PLAYER_SPAWN = Vector2.new(8, 8)
+DigDugConfig.PLAYER_SPAWN = Vector2.new(11, 11)
 
 -- Timing
 DigDugConfig.ROUND_START_DELAY = 2.0

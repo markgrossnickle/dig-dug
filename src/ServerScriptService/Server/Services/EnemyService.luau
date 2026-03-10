@@ -7,9 +7,6 @@ local Signal = require(ReplicatedStorage.Packages.Signal)
 local DigDugConfig = require(ReplicatedStorage.Shared.DigDugConfig)
 local StageLayouts = require(ReplicatedStorage.Shared.StageLayouts)
 
-local COLS = DigDugConfig.GRID_COLUMNS
-local ROWS = DigDugConfig.GRID_ROWS
-
 type Enemy = {
 	id: number,
 	enemyType: string,
@@ -68,7 +65,7 @@ end
 
 function EnemyService:SpawnEnemies(stage: number, player: Player)
 	self._enemies = {}
-	self._active = true
+	self._active = false -- AI starts paused; call StartAI() to activate
 	self._currentStage = stage
 	self._fleeTriggered = false
 
@@ -80,7 +77,10 @@ function EnemyService:SpawnEnemies(stage: number, player: Player)
 	for _, spawn in layout.enemies do
 		self:_spawnEnemy(spawn.enemyType, spawn.col, spawn.row, player)
 	end
+end
 
+function EnemyService:StartAI(player: Player)
+	self._active = true
 	self:_startAILoop(player)
 end
 

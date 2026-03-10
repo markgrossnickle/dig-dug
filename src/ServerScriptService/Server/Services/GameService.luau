@@ -23,6 +23,7 @@ local GameService = Knit.CreateService({
 -- Game states
 GameService.State = {
 	WAITING = "Waiting",
+	STARTING = "Starting", -- round splash visible, enemies frozen, player can't move
 	PLAYING = "Playing",
 	DYING = "Dying",
 	STAGE_CLEAR = "StageClear",
@@ -94,7 +95,8 @@ function GameService:StartStage(player: Player)
 		return
 	end
 
-	data.state = self.State.PLAYING
+	-- STARTING state: player can't move, enemies frozen
+	data.state = self.State.STARTING
 
 	-- Initialize grid for this stage
 	local GridService = Knit.GetService("GridService")
@@ -110,13 +112,26 @@ function GameService:StartStage(player: Player)
 	local PlayerService = Knit.GetService("PlayerService")
 	PlayerService:SpawnPlayer(player, layout.playerSpawn)
 
-	-- Spawn enemies
+	-- Spawn enemies (visual only, AI not started yet)
 	local EnemyService = Knit.GetService("EnemyService")
 	EnemyService:SpawnEnemies(data.stage, player)
 
 	self.Client.StageChanged:Fire(player, data.stage)
 	self.Client.GameStateChanged:Fire(player, data.state)
 	self.StageStarted:Fire(player, data.stage)
+
+	-- After round splash delay, activate enemies and allow player movement
+	task.delay(DigDugConfig.ROUND_START_DELAY, function()
+		if not self._playerData[player] then
+			return
+		end
+		-- Only transition if still in STARTING (not died/cleared during delay)
+		if data.state == self.State.STARTING then
+			data.state = self.State.PLAYING
+			self.Client.GameStateChanged:Fire(player, data.state)
+			EnemyService:StartAI(player)
+		end
+	end)
 end
 
 function GameService:AddScore(player: Player, points: number)
